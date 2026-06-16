@@ -1,0 +1,34 @@
+# Copie este arquivo para application-local.properties e preencha os valores.
+# Nunca commite credenciais reais no Git.
+
+spring.application.name=finora-api
+
+# Banco de dados PostgreSQL
+spring.datasource.url=jdbc:postgresql://localhost:5432/finora_db
+spring.datasource.username=finora_app
+spring.datasource.password=${FINORA_DB_PASSWORD}
+
+# JPA / Hibernate
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.open-in-view=false
+
+# JWT
+# Gere com: [Convert]::ToBase64String([System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+finora.jwt.secret=${FINORA_JWT_SECRET}
+finora.jwt.issuer=finora-api
+finora.jwt.expiracao-segundos=3600
+
+# Servidor
+server.port=8080
+
+server.error.include-stacktrace=never
+server.error.include-message=never
+
+# Swagger / OpenAPI
+springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.api-docs.path=/v3/api-docs
+springdoc.swagger-ui.operationsSorter=alpha
+springdoc.swagger-ui.tagsSorter=alpha
+springdoc.swagger-ui.try-it-out-enabled=true

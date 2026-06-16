@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: finora-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: FINORA_DB_PASSWORD
+        sync: false
+      - key: FINORA_JWT_SECRET
+        sync: false
+      - key: FINORA_FRONTEND_URL
+        sync: false

@@ -1,0 +1,25 @@
+# Variáveis e credenciais
+.env
+.env.*
+!.env.example
+application-local.properties
+
+# Front-end
+frontend/node_modules/
+frontend/client/node_modules/
+frontend/dist/
+frontend/client/dist/
+frontend/.vite/
+frontend/client/.vite/
+
+# Back-end Java
+backend/target/
+backend/build/
+backend/.gradle/
+
+# IDE / sistema
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
