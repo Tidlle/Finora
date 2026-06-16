@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, Search, Pencil, Trash2, Receipt } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Receipt, Download } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,8 @@ interface TransactionForm {
   categoriaId: string;
   dataTransacao: string;
   observacao: string;
+  recorrente: boolean;
+  mesesRecorrencia: number;
 }
 
 function mesAtualPadrao() {
@@ -45,6 +47,8 @@ const emptyForm: TransactionForm = {
   categoriaId: "",
   dataTransacao: dataAtualPadrao(),
   observacao: "",
+  recorrente: false,
+  mesesRecorrencia: 3,
 };
 
 export default function TransactionsPage() {
@@ -59,6 +63,8 @@ export default function TransactionsPage() {
   const [form, setForm] = useState<TransactionForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<TransacaoResponse | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
   const availableCategories = useMemo(
     () => categories.filter((category) => category.tipo === form.tipo),
@@ -78,6 +84,54 @@ export default function TransactionsPage() {
     const resposta = await listarCategorias();
     setCategories(resposta);
     return resposta;
+  }
+
+  function toggleSelect(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds(selectedIds.size === transactions.length ? new Set() : new Set(transactions.map((t) => t.id)));
+  }
+
+  async function confirmarBulkDelete() {
+    try {
+      await Promise.all([...selectedIds].map((id) => excluirTransacao(id)));
+      toast.success(`${selectedIds.size} transação(ões) excluída(s).`);
+      setSelectedIds(new Set());
+      await carregarTransacoes();
+      carregarCategorias().catch(() => {});
+    } catch {
+      toast.error("Erro ao excluir transações selecionadas.");
+    } finally {
+      setBulkDeleteOpen(false);
+    }
+  }
+
+  function exportarCSV() {
+    const linhas = [
+      ["Data", "Descrição", "Categoria", "Tipo", "Valor", "Observação"],
+      ...transactions.map((t) => [
+        t.dataTransacao,
+        `"${t.descricao.replace(/"/g, '""')}"`,
+        t.categoriaNome,
+        t.tipo,
+        String(t.valor),
+        `"${(t.observacao ?? "").replace(/"/g, '""')}"`,
+      ]),
+    ];
+    const csv = linhas.map((l) => l.join(";")).join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `finora-transacoes-${month}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function carregarTransacoes() {
@@ -120,6 +174,8 @@ export default function TransactionsPage() {
       categoriaId: String(transaction.categoriaId),
       dataTransacao: transaction.dataTransacao,
       observacao: transaction.observacao ?? "",
+      recorrente: false,
+      mesesRecorrencia: 3,
     });
     setDialogOpen(true);
   }
@@ -142,7 +198,7 @@ export default function TransactionsPage() {
       return;
     }
 
-    const payload = {
+    const basePayload = {
       descricao: form.descricao.trim(),
       valor,
       tipo: form.tipo,
@@ -153,10 +209,20 @@ export default function TransactionsPage() {
 
     try {
       if (editing) {
-        await atualizarTransacao(editing.id, payload);
+        await atualizarTransacao(editing.id, basePayload);
         toast.success("Transação atualizada.");
+      } else if (form.recorrente && form.mesesRecorrencia > 1) {
+        const [ano, mes, dia] = form.dataTransacao.split("-").map(Number);
+        const payloads = Array.from({ length: form.mesesRecorrencia }, (_, i) => {
+          const data = new Date(ano, mes - 1 + i, dia);
+          const mesAjustado = String(data.getMonth() + 1).padStart(2, "0");
+          const diaAjustado = String(data.getDate()).padStart(2, "0");
+          return { ...basePayload, dataTransacao: `${data.getFullYear()}-${mesAjustado}-${diaAjustado}` };
+        });
+        await Promise.all(payloads.map((p) => criarTransacao(p)));
+        toast.success(`${form.mesesRecorrencia} transações recorrentes criadas.`);
       } else {
-        await criarTransacao(payload);
+        await criarTransacao(basePayload);
         toast.success("Transação adicionada.");
       }
       setDialogOpen(false);
@@ -183,9 +249,23 @@ export default function TransactionsPage() {
 
   return (
     <AppShell title="Transações" subtitle="Gerencie todas as suas movimentações financeiras.">
-      <div className="flex gap-3 flex-col sm:flex-row">
-        <Button onClick={() => openNew("RECEITA")} className="bg-green-600 text-white hover:bg-green-700"><Plus size={18} />Nova receita</Button>
-        <Button onClick={() => openNew("DESPESA")}><Plus size={18} />Nova despesa</Button>
+      <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-3">
+          <Button onClick={() => openNew("RECEITA")} className="bg-green-600 text-white hover:bg-green-700"><Plus size={18} />Nova receita</Button>
+          <Button onClick={() => openNew("DESPESA")}><Plus size={18} />Nova despesa</Button>
+        </div>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
+              <Trash2 size={15} /> Excluir {selectedIds.size} selecionada(s)
+            </Button>
+          )}
+          {transactions.length > 0 && (
+            <Button variant="outline" size="sm" onClick={exportarCSV}>
+              <Download size={15} /> Exportar CSV
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card className="border-border">
@@ -269,10 +349,12 @@ export default function TransactionsPage() {
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full">
                 <thead><tr className="border-b border-border">
+                  <th className="px-4 py-3 w-8"><input type="checkbox" className="accent-primary" checked={selectedIds.size === transactions.length && transactions.length > 0} onChange={toggleSelectAll} aria-label="Selecionar todos" /></th>
                   {["Data", "Descrição", "Categoria", "Tipo", "Valor", "Ações"].map((heading) => <th key={heading} className={`px-5 py-3 text-xs font-heading font-bold text-muted-foreground uppercase ${heading === "Valor" ? "text-right" : "text-left"}`}>{heading}</th>)}
                 </tr></thead>
                 <tbody>{transactions.map((transaction) => (
-                  <tr key={transaction.id} className="border-b border-border hover:bg-secondary/30 transition-colors">
+                  <tr key={transaction.id} className={`border-b border-border hover:bg-secondary/30 transition-colors ${selectedIds.has(transaction.id) ? "bg-secondary/20" : ""}`}>
+                    <td className="px-4 py-4"><input type="checkbox" className="accent-primary" checked={selectedIds.has(transaction.id)} onChange={() => toggleSelect(transaction.id)} /></td>
                     <td className="px-5 py-4 text-sm">{formatDate(transaction.dataTransacao)}</td>
                     <td className="px-5 py-4 text-sm font-medium">{transaction.descricao}</td>
                     <td className="px-5 py-4 text-sm text-muted-foreground">{transaction.categoriaNome}</td>
@@ -286,8 +368,11 @@ export default function TransactionsPage() {
           </Card>
           <div className="md:hidden space-y-3">
             {transactions.map((transaction) => (
-              <Card key={transaction.id} className="border-border"><CardContent className="p-4 space-y-3">
-                <div className="flex justify-between gap-3"><div><p className="font-medium">{transaction.descricao}</p><p className="text-xs text-muted-foreground">{formatDate(transaction.dataTransacao)} • {transaction.categoriaNome}</p></div><p className={`font-bold ${transaction.tipo === "RECEITA" ? "text-green-400" : "text-red-400"}`}>{transaction.tipo === "RECEITA" ? "+" : "-"} {formatCurrency(transaction.valor)}</p></div>
+              <Card key={transaction.id} className={`border-border ${selectedIds.has(transaction.id) ? "ring-1 ring-primary" : ""}`}><CardContent className="p-4 space-y-3">
+                <div className="flex justify-between gap-3">
+                  <div className="flex items-start gap-3"><input type="checkbox" className="accent-primary mt-1" checked={selectedIds.has(transaction.id)} onChange={() => toggleSelect(transaction.id)} /><div><p className="font-medium">{transaction.descricao}</p><p className="text-xs text-muted-foreground">{formatDate(transaction.dataTransacao)} • {transaction.categoriaNome}</p></div></div>
+                  <p className={`font-bold shrink-0 ${transaction.tipo === "RECEITA" ? "text-green-400" : "text-red-400"}`}>{transaction.tipo === "RECEITA" ? "+" : "-"} {formatCurrency(transaction.valor)}</p>
+                </div>
                 <div className="flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => openEdit(transaction)}><Pencil /> Editar</Button><Button variant="ghost" size="sm" className="text-red-400" onClick={() => setDeleteTarget(transaction)}><Trash2 /> Excluir</Button></div>
               </CardContent></Card>
             ))}
@@ -313,10 +398,41 @@ export default function TransactionsPage() {
             </div>
             <div className="space-y-2"><Label htmlFor="category">Categoria</Label><select id="category" value={form.categoriaId} onChange={(event) => setForm({ ...form, categoriaId: event.target.value })} className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm text-foreground">{availableCategories.map((category) => <option key={category.id} value={category.id} className="bg-card">{category.nome}</option>)}</select></div>
             <div className="space-y-2"><Label htmlFor="note">Observação</Label><Textarea id="note" value={form.observacao} onChange={(event) => setForm({ ...form, observacao: event.target.value })} placeholder="Opcional" /></div>
+            {!editing && (
+              <div className="space-y-3 rounded-md border border-border p-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" className="accent-primary" checked={form.recorrente} onChange={(e) => setForm({ ...form, recorrente: e.target.checked })} />
+                  <span className="text-sm font-medium">Repetir mensalmente</span>
+                </label>
+                {form.recorrente && (
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="meses" className="text-sm whitespace-nowrap">Por quantos meses?</Label>
+                    <Input id="meses" type="number" min={2} max={24} value={form.mesesRecorrencia} onChange={(e) => setForm({ ...form, mesesRecorrencia: Math.min(24, Math.max(2, Number(e.target.value))) })} className="w-20" />
+                  </div>
+                )}
+              </div>
+            )}
             <DialogFooter><Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button><Button type="submit">Salvar transação</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir transações selecionadas</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {selectedIds.size} transação(ões)? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmarBulkDelete} className="bg-red-600 hover:bg-red-700 text-white">
+              Excluir todas
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
