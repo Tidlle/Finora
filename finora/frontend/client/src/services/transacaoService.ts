@@ -55,10 +55,25 @@ export async function listarTransacoes(
   params.append("page", String(filtros.page ?? 0));
   params.append("size", String(filtros.size ?? 20));
 
-  return apiRequest<TransacaoPageResponse>(`/transacoes?${params.toString()}`, {
-    method: "GET",
-    token,
-  });
+  const raw = await apiRequest<TransacaoPageResponse | TransacaoResponse[]>(
+    `/transacoes?${params.toString()}`,
+    { method: "GET", token }
+  );
+
+  // Compatibilidade com backend antigo que retorna array direto
+  if (Array.isArray(raw)) {
+    return {
+      content: raw,
+      page: 0,
+      size: raw.length,
+      totalElements: raw.length,
+      totalPages: 1,
+      first: true,
+      last: true,
+    };
+  }
+
+  return raw;
 }
 
 export async function criarTransacao(
