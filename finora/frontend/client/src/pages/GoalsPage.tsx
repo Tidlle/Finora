@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, Target } from "lucide-react";
+import { Plus, Target, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { GoalProgressCard } from "@/components/FinancialComponents";
@@ -193,8 +193,18 @@ export default function GoalsPage() {
             const prazoStatus = statusPrazo(goal.prazo, goal.status);
             return (
               <div key={goal.id} className="space-y-2">
-                {prazoStatus && (
-                  <div className="flex gap-2">
+                {(prazoStatus || goal.status === "CONCLUIDA" || goal.progressoPercentual >= 80) && (
+                  <div className="flex gap-2 flex-wrap">
+                    {goal.status === "CONCLUIDA" && (
+                      <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                        <CheckCircle size={11} className="mr-1" />Meta concluída
+                      </Badge>
+                    )}
+                    {goal.progressoPercentual >= 80 && goal.status !== "CONCLUIDA" && (
+                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                        {goal.progressoPercentual}% concluída
+                      </Badge>
+                    )}
                     {prazoStatus === "vencido" && (
                       <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Prazo vencido</Badge>
                     )}

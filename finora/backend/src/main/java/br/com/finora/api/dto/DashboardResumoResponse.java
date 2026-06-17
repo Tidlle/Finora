@@ -11,6 +11,8 @@ public record DashboardResumoResponse(
         DashboardCategoriaResponse maiorCategoriaGasto,
         List<DashboardCategoriaResponse> gastosPorCategoria,
         List<TransacaoResponse> ultimasTransacoes,
-        List<DashboardEvolucaoMensalResponse> evolucaoMensal
+        List<DashboardEvolucaoMensalResponse> evolucaoMensal,
+        BigDecimal variacaoReceitas,
+        BigDecimal variacaoDespesas
 ) {
 }

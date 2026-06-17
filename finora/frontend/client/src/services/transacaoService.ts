@@ -23,40 +23,39 @@ export type TransacaoResponse = {
   criadoEm: string;
 };
 
+export type TransacaoPageResponse = {
+  content: TransacaoResponse[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  first: boolean;
+  last: boolean;
+};
+
 export type FiltrosTransacao = {
   tipo?: TipoTransacao;
   categoriaId?: number;
   mes?: string;
   busca?: string;
+  page?: number;
+  size?: number;
 };
 
 export async function listarTransacoes(
   filtros: FiltrosTransacao = {}
-): Promise<TransacaoResponse[]> {
+): Promise<TransacaoPageResponse> {
   const token = obterToken();
-
   const params = new URLSearchParams();
 
-  if (filtros.tipo) {
-    params.append("tipo", filtros.tipo);
-  }
+  if (filtros.tipo) params.append("tipo", filtros.tipo);
+  if (filtros.categoriaId) params.append("categoriaId", String(filtros.categoriaId));
+  if (filtros.mes) params.append("mes", filtros.mes);
+  if (filtros.busca) params.append("busca", filtros.busca);
+  params.append("page", String(filtros.page ?? 0));
+  params.append("size", String(filtros.size ?? 20));
 
-  if (filtros.categoriaId) {
-    params.append("categoriaId", String(filtros.categoriaId));
-  }
-
-  if (filtros.mes) {
-    params.append("mes", filtros.mes);
-  }
-
-  if (filtros.busca) {
-    params.append("busca", filtros.busca);
-  }
-
-  const query = params.toString();
-  const endpoint = query ? `/transacoes?${query}` : "/transacoes";
-
-  return apiRequest<TransacaoResponse[]>(endpoint, {
+  return apiRequest<TransacaoPageResponse>(`/transacoes?${params.toString()}`, {
     method: "GET",
     token,
   });
@@ -66,7 +65,6 @@ export async function criarTransacao(
   dados: TransacaoRequest
 ): Promise<TransacaoResponse> {
   const token = obterToken();
-
   return apiRequest<TransacaoResponse>("/transacoes", {
     method: "POST",
     body: dados,
@@ -79,7 +77,6 @@ export async function atualizarTransacao(
   dados: TransacaoRequest
 ): Promise<TransacaoResponse> {
   const token = obterToken();
-
   return apiRequest<TransacaoResponse>(`/transacoes/${id}`, {
     method: "PUT",
     body: dados,
@@ -89,7 +86,6 @@ export async function atualizarTransacao(
 
 export async function excluirTransacao(id: number): Promise<void> {
   const token = obterToken();
-
   return apiRequest<void>(`/transacoes/${id}`, {
     method: "DELETE",
     token,

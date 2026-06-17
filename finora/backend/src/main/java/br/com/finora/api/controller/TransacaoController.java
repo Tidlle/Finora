@@ -1,5 +1,6 @@
 package br.com.finora.api.controller;
 
+import br.com.finora.api.dto.TransacaoPageResponse;
 import br.com.finora.api.dto.TransacaoRequest;
 import br.com.finora.api.dto.TransacaoResponse;
 import br.com.finora.api.enums.TipoTransacao;
@@ -19,8 +20,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/transacoes")
 public class TransacaoController {
@@ -32,21 +31,19 @@ public class TransacaoController {
     }
 
     @GetMapping
-    public ResponseEntity<List<TransacaoResponse>> listar(
+    public ResponseEntity<TransacaoPageResponse> listar(
             @AuthenticationPrincipal Jwt jwt,
             @RequestParam(required = false) TipoTransacao tipo,
             @RequestParam(required = false) Long categoriaId,
             @RequestParam(required = false) String mes,
-            @RequestParam(required = false) String busca
+            @RequestParam(required = false) String busca,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
     ) {
         Long usuarioId = extrairUsuarioId(jwt);
 
-        List<TransacaoResponse> response = transacaoService.listar(
-                usuarioId,
-                tipo,
-                categoriaId,
-                mes,
-                busca
+        TransacaoPageResponse response = transacaoService.listar(
+                usuarioId, tipo, categoriaId, mes, busca, page, size
         );
 
         return ResponseEntity.ok(response);
@@ -59,14 +56,9 @@ public class TransacaoController {
     ) {
         Long usuarioId = extrairUsuarioId(jwt);
 
-        TransacaoResponse response = transacaoService.criar(
-                usuarioId,
-                request
-        );
+        TransacaoResponse response = transacaoService.criar(usuarioId, request);
 
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(response);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("/{id}")
@@ -77,11 +69,7 @@ public class TransacaoController {
     ) {
         Long usuarioId = extrairUsuarioId(jwt);
 
-        TransacaoResponse response = transacaoService.atualizar(
-                usuarioId,
-                id,
-                request
-        );
+        TransacaoResponse response = transacaoService.atualizar(usuarioId, id, request);
 
         return ResponseEntity.ok(response);
     }
