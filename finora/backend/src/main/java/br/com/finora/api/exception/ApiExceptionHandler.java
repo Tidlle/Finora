@@ -1,5 +1,6 @@
 package br.com.finora.api.exception;
 
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -57,6 +58,30 @@ public class ApiExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(resposta);
+    }
+
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<Map<String, Object>> tratarErroBancoDados(
+            DataAccessException exception
+    ) {
+        Map<String, Object> resposta = new LinkedHashMap<>();
+        resposta.put("timestamp", OffsetDateTime.now());
+        resposta.put("status", HttpStatus.SERVICE_UNAVAILABLE.value());
+        resposta.put("erro", "Erro de banco de dados");
+        resposta.put("mensagem", "Não foi possível processar a operação. Tente novamente.");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(resposta);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, Object>> tratarErroGenerico(
+            Exception exception
+    ) {
+        Map<String, Object> resposta = new LinkedHashMap<>();
+        resposta.put("timestamp", OffsetDateTime.now());
+        resposta.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+        resposta.put("erro", "Erro interno");
+        resposta.put("mensagem", "Ocorreu um erro inesperado. Tente novamente.");
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(resposta);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
