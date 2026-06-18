@@ -47,8 +47,9 @@ public class DashboardService {
         LocalDate dataInicial;
         LocalDate dataFinal;
         String mesReferencia;
+        boolean usandoPeriodoCustomizado = dataInicialStr != null && dataFinalStr != null;
 
-        if (dataInicialStr != null && dataFinalStr != null) {
+        if (usandoPeriodoCustomizado) {
             dataInicial = parsarData(dataInicialStr);
             dataFinal = parsarData(dataFinalStr).plusDays(1);
             mesReferencia = dataInicialStr + " a " + dataFinalStr;
@@ -59,12 +60,14 @@ public class DashboardService {
             mesReferencia = mesRef.toString();
         }
 
-        List<Transacao> transacoes = transacaoRepository.buscarPorPeriodo(
+        // Mantém lista sem filtro de categoria para usar no gráfico de barras
+        List<Transacao> transacoesNoPeriodo = transacaoRepository.buscarPorPeriodo(
                 usuarioId, dataInicial, dataFinal
         );
 
+        List<Transacao> transacoes = transacoesNoPeriodo;
         if (categoriaId != null) {
-            transacoes = transacoes.stream()
+            transacoes = transacoesNoPeriodo.stream()
                     .filter(t -> t.getCategoria().getId().equals(categoriaId))
                     .toList();
         }
@@ -84,14 +87,23 @@ public class DashboardService {
                 .map(this::converterTransacaoParaResponse)
                 .toList();
 
-        List<DashboardEvolucaoMensalResponse> evolucaoMensal =
-                calcularEvolucaoMensal(usuarioId, converterMesOuAtual(mes));
+        // Gráfico de barras: usa o período selecionado (sem filtro de categoria)
+        List<DashboardEvolucaoMensalResponse> evolucaoMensal;
+        if (usandoPeriodoCustomizado) {
+            evolucaoMensal = calcularEvolucaoMensalPorPeriodo(
+                    transacoesNoPeriodo,
+                    parsarData(dataInicialStr),
+                    parsarData(dataFinalStr)
+            );
+        } else {
+            evolucaoMensal = calcularEvolucaoMensal(usuarioId, converterMesOuAtual(mes));
+        }
 
         // Variação em relação ao período anterior (só para filtro mensal sem categoriaId)
         BigDecimal variacaoReceitas = null;
         BigDecimal variacaoDespesas = null;
 
-        if (dataInicialStr == null && categoriaId == null) {
+        if (!usandoPeriodoCustomizado && categoriaId == null) {
             YearMonth mesAtual = converterMesOuAtual(mes);
             YearMonth mesAnterior = mesAtual.minusMonths(1);
 
@@ -278,6 +290,29 @@ public class DashboardService {
                 })
                 .sorted(Comparator.comparing(DashboardCategoriaResponse::valor).reversed())
                 .toList();
+    }
+
+    private List<DashboardEvolucaoMensalResponse> calcularEvolucaoMensalPorPeriodo(
+            List<Transacao> transacoes, LocalDate dataInicialIncl, LocalDate dataFinalIncl
+    ) {
+        YearMonth inicio = YearMonth.from(dataInicialIncl);
+        YearMonth fim = YearMonth.from(dataFinalIncl);
+
+        List<DashboardEvolucaoMensalResponse> resultado = new ArrayList<>();
+        YearMonth mes = inicio;
+        while (!mes.isAfter(fim)) {
+            final YearMonth mesAtual = mes;
+            List<Transacao> doMes = transacoes.stream()
+                    .filter(t -> YearMonth.from(t.getDataTransacao()).equals(mesAtual))
+                    .toList();
+            resultado.add(new DashboardEvolucaoMensalResponse(
+                    mes.toString(),
+                    somarPorTipo(doMes, TipoTransacao.RECEITA),
+                    somarPorTipo(doMes, TipoTransacao.DESPESA)
+            ));
+            mes = mes.plusMonths(1);
+        }
+        return resultado;
     }
 
     private List<DashboardEvolucaoMensalResponse> calcularEvolucaoMensal(
