@@ -11,6 +11,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -54,19 +56,21 @@ public class Meta {
     @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
-    @Column(
-            name = "criado_em",
-            nullable = false,
-            insertable = false,
-            updatable = false
-    )
+    @Column(name = "criado_em", nullable = false)
     private OffsetDateTime criadoEm;
 
-    @Column(
-            name = "atualizado_em",
-            nullable = false,
-            insertable = false,
-            updatable = false
-    )
+    @Column(name = "atualizado_em", nullable = false)
     private OffsetDateTime atualizadoEm;
+
+    @PrePersist
+    protected void prePersist() {
+        OffsetDateTime agora = OffsetDateTime.now();
+        criadoEm = agora;
+        atualizadoEm = agora;
+    }
+
+    @PreUpdate
+    protected void preUpdate() {
+        atualizadoEm = OffsetDateTime.now();
+    }
 }
