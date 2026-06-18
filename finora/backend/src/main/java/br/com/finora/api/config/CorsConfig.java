@@ -22,7 +22,9 @@ public class CorsConfig {
 
         List<String> origensPermitidas = new ArrayList<>(List.of(
                 "http://localhost:*",
-                "http://127.0.0.1:*"
+                "http://127.0.0.1:*",
+                "https://finora-kohl.vercel.app",
+                "https://*.vercel.app"
         ));
 
         if (frontendUrl != null && !frontendUrl.isBlank()) {
