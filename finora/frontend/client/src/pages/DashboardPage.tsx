@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { TrendingDown, TrendingUp, Wallet, Tag, AlertTriangle, CheckCircle, Clock, FileText, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
@@ -151,6 +151,30 @@ function ChartEmptyState({ icon, message }: { icon: React.ReactNode; message: st
   );
 }
 
+function AreaTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const receitas = payload.find((p) => p.name === "Receitas")?.value ?? 0;
+  const despesas = payload.find((p) => p.name === "Despesas")?.value ?? 0;
+  const saldo = receitas - despesas;
+  return (
+    <div className="rounded-xl border border-[#FACC15]/20 bg-[#111111] px-4 py-3 text-xs shadow-2xl space-y-1.5" style={{ minWidth: 170 }}>
+      <p className="font-semibold text-white mb-2 text-[11px] uppercase tracking-wider">{label}</p>
+      <div className="flex justify-between gap-6">
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-green-400 inline-block" />Receitas</span>
+        <span className="tabular-nums font-medium text-green-400">{formatCurrency(receitas)}</span>
+      </div>
+      <div className="flex justify-between gap-6">
+        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-400 inline-block" />Despesas</span>
+        <span className="tabular-nums font-medium text-red-400">{formatCurrency(despesas)}</span>
+      </div>
+      <div className={`flex justify-between gap-6 border-t border-white/10 pt-1.5 ${saldo >= 0 ? "text-[#FACC15]" : "text-red-400"}`}>
+        <span className="font-medium">Saldo</span>
+        <span className="tabular-nums font-bold">{saldo >= 0 ? "+" : ""}{formatCurrency(saldo)}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { currentUser } = useFinora();
   const [modoFiltro, setModoFiltro] = useState<ModoFiltro>("mes");
@@ -163,6 +187,7 @@ export default function DashboardPage() {
   const [goals, setGoals] = useState<MetaResponse[]>([]);
   const [alertas, setAlertas] = useState<AlertaMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chartView, setChartView] = useState<"bar" | "area">("bar");
 
   const filtros = useMemo((): FiltrosDashboard => {
     if (modoFiltro === "periodo" && dataInicial && dataFinal)
@@ -384,35 +409,85 @@ export default function DashboardPage() {
             {/* Receitas vs Despesas */}
             <Card className="border-border">
               <CardHeader className="pb-0">
-                <CardTitle className="text-base">Receitas vs Despesas</CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Evolução mensal de entradas e saídas</p>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base">
+                      {chartView === "bar" ? "Receitas vs Despesas" : "Evolução financeira"}
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {chartView === "bar"
+                        ? "Evolução mensal de entradas e saídas"
+                        : "Receitas e despesas ao longo do período selecionado"}
+                    </p>
+                  </div>
+                  {/* Toggle */}
+                  <div className="flex rounded-lg border border-border overflow-hidden text-xs shrink-0">
+                    <button
+                      onClick={() => setChartView("bar")}
+                      className={`px-3 py-1.5 font-medium transition-colors ${chartView === "bar" ? "bg-accent text-black" : "text-muted-foreground hover:bg-secondary"}`}
+                    >
+                      Barras
+                    </button>
+                    <button
+                      onClick={() => setChartView("area")}
+                      className={`px-3 py-1.5 font-medium border-l border-border transition-colors ${chartView === "area" ? "bg-accent text-black" : "text-muted-foreground hover:bg-secondary"}`}
+                    >
+                      Evolução
+                    </button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="pt-4">
                 {revenueData.every((d) => d.income === 0 && d.expense === 0) ? (
                   <ChartEmptyState icon={<BarChart3Icon />} message="Nenhuma movimentação no período selecionado." />
-                ) : (
+                ) : chartView === "bar" ? (
                   <>
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={revenueData} barGap={3} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1C1C1C" vertical={false} />
-                        <XAxis
-                          dataKey="month"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }}
-                          tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
-                        />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                         <Tooltip content={<BarTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
                         <Bar dataKey="income" fill="#22C55E" name="Receitas" radius={[4, 4, 0, 0]} maxBarSize={28} />
                         <Bar dataKey="expense" fill="#EF4444" name="Despesas" radius={[4, 4, 0, 0]} maxBarSize={28} />
                       </BarChart>
                     </ResponsiveContainer>
                     <BarChartLegend melhorMes={melhorMes} />
+                  </>
+                ) : (
+                  <>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <AreaChart data={revenueData} margin={{ top: 8, right: 4, left: -10, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="gradReceitas" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#22C55E" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
+                          </linearGradient>
+                          <linearGradient id="gradDespesas" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1C1C1C" vertical={false} />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                        <Tooltip content={<AreaTooltip />} cursor={{ stroke: "#FACC15", strokeWidth: 1, strokeDasharray: "4 4" }} />
+                        <Area type="monotone" dataKey="income" name="Receitas" stroke="#22C55E" strokeWidth={2.5} fill="url(#gradReceitas)" dot={false} activeDot={{ r: 4, fill: "#22C55E", stroke: "#111", strokeWidth: 2 }} />
+                        <Area type="monotone" dataKey="expense" name="Despesas" stroke="#EF4444" strokeWidth={2.5} fill="url(#gradDespesas)" dot={false} activeDot={{ r: 4, fill: "#EF4444", stroke: "#111", strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                    <div className="flex items-center justify-between mt-3 text-xs flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-green-400 inline-block rounded-full" /><span className="text-muted-foreground">Receitas</span></div>
+                        <div className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-red-400 inline-block rounded-full" /><span className="text-muted-foreground">Despesas</span></div>
+                      </div>
+                      {melhorMes && (
+                        <span className="text-muted-foreground">
+                          Melhor mês: <span className="text-[#FACC15] font-medium">{melhorMes.month}</span>
+                          {" · "}saldo <span className="text-[#FACC15] font-medium">{formatCurrency(melhorMes.income - melhorMes.expense)}</span>
+                        </span>
+                      )}
+                    </div>
                   </>
                 )}
               </CardContent>
