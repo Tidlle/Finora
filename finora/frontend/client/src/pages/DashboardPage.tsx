@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import React, { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { TrendingDown, TrendingUp, Wallet, Tag, AlertTriangle, CheckCircle, Clock, FileText, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
@@ -87,6 +87,70 @@ ${dashboard.maiorCategoriaGasto ? `<p><strong>Maior categoria de gasto:</strong>
   w.print();
 }
 
+// ── Chart helper components ─────────────────────────────────────────────────
+
+function BarTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  const receitas = payload.find((p) => p.name === "Receitas")?.value ?? 0;
+  const despesas = payload.find((p) => p.name === "Despesas")?.value ?? 0;
+  const saldo = receitas - despesas;
+  return (
+    <div className="rounded-xl border border-border bg-card px-3.5 py-3 text-xs shadow-xl space-y-1.5" style={{ minWidth: 160 }}>
+      <p className="font-semibold text-foreground mb-2">{label}</p>
+      <div className="flex justify-between gap-6"><span className="text-green-400">Receitas</span><span className="tabular-nums font-medium">{formatCurrency(receitas)}</span></div>
+      <div className="flex justify-between gap-6"><span className="text-red-400">Despesas</span><span className="tabular-nums font-medium">{formatCurrency(despesas)}</span></div>
+      <div className={`flex justify-between gap-6 border-t border-border pt-1.5 ${saldo >= 0 ? "text-green-400" : "text-red-400"}`}>
+        <span>Saldo</span>
+        <span className="tabular-nums font-bold">{saldo >= 0 ? "+" : ""}{formatCurrency(saldo)}</span>
+      </div>
+    </div>
+  );
+}
+
+function PieTooltip({ active, payload, total }: { active?: boolean; payload?: Array<{ name: string; value: number; payload: { color: string } }>; total: number }) {
+  if (!active || !payload?.length) return null;
+  const item = payload[0];
+  const pct = total > 0 ? ((item.value / total) * 100).toFixed(1) : "0";
+  return (
+    <div className="rounded-xl border border-border bg-card px-3.5 py-3 text-xs shadow-xl space-y-1" style={{ minWidth: 160 }}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: item.payload.color }} />
+        <span className="font-semibold text-foreground">{item.name}</span>
+      </div>
+      <div className="flex justify-between gap-6"><span className="text-muted-foreground">Valor</span><span className="tabular-nums font-medium">{formatCurrency(item.value)}</span></div>
+      <div className="flex justify-between gap-6"><span className="text-muted-foreground">% do total</span><span className="tabular-nums font-medium">{pct}%</span></div>
+    </div>
+  );
+}
+
+function BarChartLegend({ melhorMes }: { melhorMes: { month: string; income: number; expense: number } | null | undefined }) {
+  return (
+    <div className="flex items-center justify-between mt-3 text-xs flex-wrap gap-2">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-500" /><span className="text-muted-foreground">Receitas</span></div>
+        <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500" /><span className="text-muted-foreground">Despesas</span></div>
+      </div>
+      {melhorMes && (
+        <span className="text-muted-foreground">
+          Melhor mês: <span className="text-green-400 font-medium">{melhorMes.month}</span>
+          {" · "}saldo <span className="text-green-400 font-medium">{formatCurrency(melhorMes.income - melhorMes.expense)}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ChartEmptyState({ icon, message }: { icon: React.ReactNode; message: string }) {
+  return (
+    <div className="h-[240px] flex flex-col items-center justify-center gap-3 text-muted-foreground">
+      <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center [&>svg]:w-5 [&>svg]:h-5">
+        {icon}
+      </div>
+      <p className="text-sm text-center max-w-xs">{message}</p>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { currentUser } = useFinora();
   const [modoFiltro, setModoFiltro] = useState<ModoFiltro>("mes");
@@ -164,7 +228,17 @@ export default function DashboardPage() {
   const alertasUrgentes = alertas.filter((a) => a.tipo === "vencida" || a.tipo === "prazoProximo");
   const alertasPositivos = alertas.filter((a) => a.tipo === "concluida" || a.tipo === "quaseConcluida");
 
-  const tooltipStyle = { backgroundColor: "#171717", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "12px" };
+  const totalDespesasCategoria = useMemo(
+    () => categoryData.reduce((s, d) => s + d.value, 0),
+    [categoryData]
+  );
+
+  const melhorMes = useMemo(() => {
+    if (!revenueData.length) return null;
+    return revenueData.reduce((best, d) =>
+      (d.income - d.expense) > (best.income - best.expense) ? d : best
+    );
+  }, [revenueData]);
 
   return (
     <AppShell title={`Olá, ${firstName} 👋`} subtitle="Aqui está o resumo das suas finanças.">
@@ -306,52 +380,119 @@ export default function DashboardPage() {
 
           {/* ── Charts ───────────────────────────────────────── */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+            {/* Receitas vs Despesas */}
             <Card className="border-border">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-0">
                 <CardTitle className="text-base">Receitas vs Despesas</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Evolução mensal de entradas e saídas</p>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 {revenueData.every((d) => d.income === 0 && d.expense === 0) ? (
-                  <div className="h-[260px] flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <BarChart3Icon />
-                    Nenhuma movimentação no período selecionado.
-                  </div>
+                  <ChartEmptyState icon={<BarChart3Icon />} message="Nenhuma movimentação no período selecionado." />
                 ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={revenueData} barGap={4}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" />
-                      <XAxis dataKey="month" stroke="#52525B" tick={{ fontSize: 11 }} />
-                      <YAxis stroke="#52525B" tick={{ fontSize: 11 }} />
-                      <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={tooltipStyle} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="income" fill="#22C55E" name="Receitas" radius={[3, 3, 0, 0]} />
-                      <Bar dataKey="expense" fill="#EF4444" name="Despesas" radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={revenueData} barGap={3} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1C1C1C" vertical={false} />
+                        <XAxis
+                          dataKey="month"
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: "#52525B", fontSize: 11, fontFamily: "Inter" }}
+                          tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                        />
+                        <Tooltip content={<BarTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                        <Bar dataKey="income" fill="#22C55E" name="Receitas" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                        <Bar dataKey="expense" fill="#EF4444" name="Despesas" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                    <BarChartLegend melhorMes={melhorMes} />
+                  </>
                 )}
               </CardContent>
             </Card>
 
+            {/* Despesas por categoria (donut) */}
             <Card className="border-border">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-0">
                 <CardTitle className="text-base">Despesas por categoria</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Distribuição das saídas no período selecionado</p>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 {categoryData.length === 0 ? (
-                  <div className="h-[260px] flex flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-                    <PieIcon />
-                    Nenhuma despesa registrada no período.
-                  </div>
+                  <ChartEmptyState icon={<PieIcon />} message="Nenhuma despesa registrada no período." />
                 ) : (
-                  <ResponsiveContainer width="100%" height={260}>
-                    <PieChart>
-                      <Pie data={categoryData} cx="50%" cy="45%" outerRadius={88} innerRadius={36} dataKey="value" nameKey="name">
-                        {categoryData.map((e) => <Cell key={e.name} fill={e.color} />)}
-                      </Pie>
-                      <Tooltip formatter={(v) => formatCurrency(Number(v))} contentStyle={tooltipStyle} />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <div className="flex flex-col sm:flex-row items-center gap-4">
+                    <div className="shrink-0 w-full sm:w-48">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={categoryData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={58}
+                            outerRadius={88}
+                            paddingAngle={2}
+                            dataKey="value"
+                            nameKey="name"
+                            strokeWidth={0}
+                          >
+                            {categoryData.map((e) => <Cell key={e.name} fill={e.color} />)}
+                            <Label
+                              content={({ viewBox }) => {
+                                const { cx, cy } = viewBox as { cx: number; cy: number };
+                                return (
+                                  <g>
+                                    <text x={cx} y={cy - 9} textAnchor="middle" fill="#71717A" fontSize={9} fontFamily="Inter">
+                                      Total gasto
+                                    </text>
+                                    <text x={cx} y={cy + 10} textAnchor="middle" fill="#F9FAFB" fontSize={12} fontWeight="700" fontFamily="Inter">
+                                      {formatCurrency(totalDespesasCategoria)}
+                                    </text>
+                                  </g>
+                                );
+                              }}
+                              position="center"
+                            />
+                          </Pie>
+                          <Tooltip content={<PieTooltip total={totalDespesasCategoria} />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex-1 w-full space-y-2">
+                      {categoryData.slice(0, 6).map((item) => {
+                        const pct = totalDespesasCategoria > 0
+                          ? ((item.value / totalDespesasCategoria) * 100).toFixed(0)
+                          : "0";
+                        return (
+                          <div key={item.name} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                                <span className="text-muted-foreground truncate">{item.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-muted-foreground">{pct}%</span>
+                                <span className="font-medium text-foreground tabular-nums">{formatCurrency(item.value)}</span>
+                              </div>
+                            </div>
+                            <div className="h-1 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500"
+                                style={{ width: `${pct}%`, backgroundColor: item.color }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
