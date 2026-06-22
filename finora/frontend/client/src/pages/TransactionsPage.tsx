@@ -137,7 +137,7 @@ export default function TransactionsPage() {
   async function carregarTransacoes() {
     try {
       setLoading(true);
-      setTransactions(await listarTransacoes(filtros));
+      setTransactions((await listarTransacoes(filtros)).content);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao carregar transações.");
     } finally {
