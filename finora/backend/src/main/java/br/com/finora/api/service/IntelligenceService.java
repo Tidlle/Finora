@@ -149,17 +149,15 @@ public class IntelligenceService {
     }
 
     private final CategoriaService categoriaService;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean pythonHabilitado;
     private final RestClient restClient;
 
     public IntelligenceService(
             CategoriaService categoriaService,
-            ObjectMapper objectMapper,
             @Value("${finora.intelligence.url:}") String intelligenceUrl
     ) {
         this.categoriaService = categoriaService;
-        this.objectMapper = objectMapper;
         this.pythonHabilitado = intelligenceUrl != null && !intelligenceUrl.isBlank();
 
         if (this.pythonHabilitado) {
