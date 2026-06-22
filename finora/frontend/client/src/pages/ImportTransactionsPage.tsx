@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
+import { Upload, FileText, CheckCircle, AlertCircle, ArrowLeft, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/finance";
 import { listarCategorias, type CategoriaResponse, type TipoTransacao } from "@/services/categoriaService";
 import { criarTransacao } from "@/services/transacaoService";
+import { sugerirCategoriasLote, type SugestaoLoteItem } from "@/services/intelligenceService";
 
 type LinhaImport = {
   index: number;
@@ -20,6 +22,7 @@ type LinhaImport = {
   categoriaNome: string;
   selecionada: boolean;
   erro: string | null;
+  sugestao: SugestaoLoteItem | null;
 };
 
 function detectarDelimitador(conteudo: string): string {
@@ -42,9 +45,20 @@ function parsearTipo(str: string): TipoTransacao | null {
 function parsearData(str: string): string | null {
   const partes = str.trim().split(/[-/]/);
   if (partes.length !== 3) return null;
-  // Aceita YYYY-MM-DD ou DD/MM/YYYY
   if (partes[0].length === 4) return `${partes[0]}-${partes[1].padStart(2, "0")}-${partes[2].padStart(2, "0")}`;
   return `${partes[2]}-${partes[1].padStart(2, "0")}-${partes[0].padStart(2, "0")}`;
+}
+
+function confiancaLabel(confianca: number): string {
+  if (confianca >= 0.85) return "Alta";
+  if (confianca >= 0.6) return "Média";
+  return "Baixa";
+}
+
+function confiancaClasse(confianca: number): string {
+  if (confianca >= 0.85) return "bg-green-500/20 text-green-400";
+  if (confianca >= 0.6) return "bg-yellow-500/20 text-yellow-400";
+  return "bg-red-500/20 text-red-400";
 }
 
 export default function ImportTransactionsPage() {
@@ -54,6 +68,7 @@ export default function ImportTransactionsPage() {
   const [loadingCategorias, setLoadingCategorias] = useState(true);
   const [linhas, setLinhas] = useState<LinhaImport[]>([]);
   const [importando, setImportando] = useState(false);
+  const [sugerindo, setSugerindo] = useState(false);
   const [nomeArquivo, setNomeArquivo] = useState("");
 
   useEffect(() => {
@@ -69,15 +84,14 @@ export default function ImportTransactionsPage() {
     ) ?? null;
   }
 
-  function processarArquivo(file: File) {
+  async function processarArquivo(file: File) {
     setNomeArquivo(file.name);
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const conteudo = (e.target?.result as string) ?? "";
       const delim = detectarDelimitador(conteudo);
       const linhasRaw = conteudo.replace(/\r/g, "").split("\n").filter(Boolean);
 
-      // Pula cabeçalho se a primeira linha contiver texto não numérico
       const inicio = isNaN(Number(linhasRaw[0]?.split(delim)[0])) ? 1 : 0;
       const dados = linhasRaw.slice(inicio);
 
@@ -109,10 +123,60 @@ export default function ImportTransactionsPage() {
           categoriaNome: categoriaNomeCsv,
           selecionada: erros.length === 0,
           erro: erros.length > 0 ? erros.join("; ") : null,
+          sugestao: null,
         };
       });
 
       setLinhas(resultado);
+
+      // Solicita sugestões para linhas com categoria faltando
+      const semCategoria = resultado.filter(
+        (l) => l.tipo && l.descricao && !l.categoriaId
+      );
+
+      if (semCategoria.length > 0) {
+        setSugerindo(true);
+        try {
+          const sugestoes = await sugerirCategoriasLote(
+            semCategoria.map((l) => ({ descricao: l.descricao, tipo: l.tipo }))
+          );
+
+          setLinhas((prev) =>
+            prev.map((l) => {
+              if (l.categoriaId) return l;
+              const sug = sugestoes.find((s) => s.descricao === l.descricao) ?? null;
+              if (!sug || !sug.categoriaId) return { ...l, sugestao: sug };
+
+              const catSugerida = categorias.find((c) => c.id === sug.categoriaId);
+              if (!catSugerida) return { ...l, sugestao: sug };
+
+              // Aplica sugestão automaticamente, mantendo o erro mas removendo o de categoria
+              const erroAtualizado = l.erro
+                ?.split("; ")
+                .filter((e) => !e.startsWith("categoria"))
+                .join("; ") || null;
+
+              return {
+                ...l,
+                categoriaId: sug.categoriaId,
+                categoriaNome: sug.categoriaNome ?? "",
+                selecionada: !erroAtualizado,
+                erro: erroAtualizado,
+                sugestao: sug,
+              };
+            })
+          );
+
+          const comSugestao = sugestoes.filter((s) => s.categoriaId !== null).length;
+          if (comSugestao > 0) {
+            toast.success(`Finora Intelligence sugeriu ${comSugestao} categoria(s) automaticamente.`);
+          }
+        } catch {
+          toast.error("Não foi possível obter sugestões de categoria. Selecione manualmente.");
+        } finally {
+          setSugerindo(false);
+        }
+      }
     };
     reader.readAsText(file, "UTF-8");
   }
@@ -139,7 +203,17 @@ export default function ImportTransactionsPage() {
       prev.map((l) => {
         if (l.index !== index) return l;
         const cat = categorias.find((c) => c.id === categoriaId);
-        return { ...l, categoriaId, categoriaNome: cat?.nome ?? l.categoriaNome, erro: null, selecionada: true };
+        const erroAtualizado = l.erro
+          ?.split("; ")
+          .filter((e) => !e.startsWith("categoria"))
+          .join("; ") || null;
+        return {
+          ...l,
+          categoriaId,
+          categoriaNome: cat?.nome ?? l.categoriaNome,
+          erro: erroAtualizado,
+          selecionada: !erroAtualizado,
+        };
       })
     );
   }
@@ -214,7 +288,11 @@ export default function ImportTransactionsPage() {
                 2026-06-10;Mercado;250.00;DESPESA;Alimentação<br />
                 2026-06-12;Salário;3500.00;RECEITA;Salário
               </code>
-              <p className="text-xs text-muted-foreground">Aceita delimitadores <code>;</code> ou <code>,</code> e valores com vírgula decimal.</p>
+              <p className="text-xs text-muted-foreground">
+                Aceita delimitadores <code>;</code> ou <code>,</code> e valores com vírgula decimal.
+                Categorias não encontradas serão sugeridas automaticamente pela{" "}
+                <span className="text-primary font-medium">Finora Intelligence</span>.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -225,6 +303,11 @@ export default function ImportTransactionsPage() {
               <div className="flex items-center gap-3">
                 <FileText size={20} className="text-muted-foreground" />
                 <span className="text-sm font-medium">{nomeArquivo}</span>
+                {sugerindo && (
+                  <span className="flex items-center gap-1 text-xs text-primary animate-pulse">
+                    <Sparkles size={12} /> Analisando categorias…
+                  </span>
+                )}
               </div>
               <div className="flex gap-4 text-sm">
                 <span className="text-green-400"><CheckCircle size={14} className="inline mr-1" />{validas.length} válidas</span>
@@ -233,7 +316,7 @@ export default function ImportTransactionsPage() {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => { setLinhas([]); setNomeArquivo(""); }}>Trocar arquivo</Button>
-                <Button size="sm" onClick={confirmarImportacao} disabled={importando || selecionadas.length === 0}>
+                <Button size="sm" onClick={confirmarImportacao} disabled={importando || sugerindo || selecionadas.length === 0}>
                   {importando ? "Importando..." : `Importar ${selecionadas.length} transação(ões)`}
                 </Button>
               </div>
@@ -241,7 +324,16 @@ export default function ImportTransactionsPage() {
           </Card>
 
           <Card className="border-border">
-            <CardHeader><CardTitle>Prévia das transações</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Prévia das transações
+                {linhas.some((l) => l.sugestao?.categoriaId) && (
+                  <span className="flex items-center gap-1 text-xs font-normal text-primary">
+                    <Sparkles size={12} /> Categorias sugeridas pela Finora Intelligence
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -278,10 +370,10 @@ export default function ImportTransactionsPage() {
                         {formatCurrency(l.valor)}
                       </td>
                       <td className="px-4 py-3">
-                        {l.erro?.includes("categoria") ? (
+                        <div className="flex flex-col gap-1">
                           <select
                             value={l.categoriaId ?? ""}
-                            onChange={(e) => setCategoria(l.index, Number(e.target.value))}
+                            onChange={(e) => e.target.value && setCategoria(l.index, Number(e.target.value))}
                             className="h-8 rounded border border-input bg-transparent px-2 text-xs text-foreground"
                           >
                             <option value="" className="bg-card">Selecione…</option>
@@ -289,9 +381,19 @@ export default function ImportTransactionsPage() {
                               <option key={c.id} value={c.id} className="bg-card">{c.nome}</option>
                             ))}
                           </select>
-                        ) : (
-                          <span className="text-muted-foreground">{l.categoriaNome}</span>
-                        )}
+                          {l.sugestao?.categoriaId && (
+                            <span
+                              className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded w-fit ${confiancaClasse(l.sugestao.confianca)}`}
+                              title={l.sugestao.motivo}
+                            >
+                              <Sparkles size={10} />
+                              IA · {confiancaLabel(l.sugestao.confianca)}
+                            </span>
+                          )}
+                          {l.sugestao && !l.sugestao.categoriaId && (
+                            <span className="text-xs text-muted-foreground">Sem sugestão</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {l.erro && !l.categoriaId ? (
