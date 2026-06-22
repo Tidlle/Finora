@@ -252,22 +252,26 @@ export default function TransactionsPage() {
   return (
     <AppShell title="Transações" subtitle="Gerencie todas as suas movimentações financeiras.">
       <div className="flex gap-3 flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-3">
-          <Button onClick={() => openNew("RECEITA")} className="bg-green-600 text-white hover:bg-green-700"><Plus size={18} />Nova receita</Button>
-          <Button onClick={() => openNew("DESPESA")}><Plus size={18} />Nova despesa</Button>
-        </div>
         <div className="flex gap-2">
+          <Button onClick={() => openNew("RECEITA")} className="bg-green-600 text-white hover:bg-green-700 gap-1.5">
+            <Plus size={16} /> Nova receita
+          </Button>
+          <Button onClick={() => openNew("DESPESA")} className="gap-1.5">
+            <Plus size={16} /> Nova despesa
+          </Button>
+        </div>
+        <div className="flex gap-2 flex-wrap">
           {selectedIds.size > 0 && (
             <Button variant="destructive" size="sm" onClick={() => setBulkDeleteOpen(true)}>
-              <Trash2 size={15} /> Excluir {selectedIds.size} selecionada(s)
+              <Trash2 size={14} /> Excluir {selectedIds.size} selecionada(s)
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => setLocation("/import")}>
-            <Upload size={15} /> Importar CSV
+            <Upload size={14} /> Importar CSV
           </Button>
           {transactions.length > 0 && (
             <Button variant="outline" size="sm" onClick={exportarCSV}>
-              <Download size={15} /> Exportar CSV
+              <Download size={14} /> Exportar CSV
             </Button>
           )}
         </div>
@@ -339,13 +343,26 @@ export default function TransactionsPage() {
         </>
       ) : transactions.length === 0 ? (
         <Card className="border-border">
-          <CardContent className="p-12 text-center">
-            <Receipt size={42} className="mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">
-              {filtrosAtivos
-                ? "Nenhuma transação encontrada para os filtros selecionados."
-                : "Você ainda não tem transações. Comece adicionando uma receita ou despesa."}
-            </p>
+          <CardContent className="p-14 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mx-auto">
+              <Receipt size={24} className="text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-heading font-bold">
+                {filtrosAtivos ? "Nenhuma transação encontrada" : "Nenhuma transação ainda"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+                {filtrosAtivos
+                  ? "Tente ajustar os filtros para ver outras movimentações."
+                  : "Comece adicionando uma receita ou despesa, ou importe um CSV."}
+              </p>
+            </div>
+            {!filtrosAtivos && (
+              <div className="flex gap-2 justify-center">
+                <Button size="sm" onClick={() => openNew("RECEITA")} className="bg-green-600 hover:bg-green-700 text-white"><Plus size={14} /> Nova receita</Button>
+                <Button size="sm" onClick={() => openNew("DESPESA")}><Plus size={14} /> Nova despesa</Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -363,7 +380,7 @@ export default function TransactionsPage() {
                     <td className="px-5 py-4 text-sm">{formatDate(transaction.dataTransacao)}</td>
                     <td className="px-5 py-4 text-sm font-medium">{transaction.descricao}</td>
                     <td className="px-5 py-4 text-sm text-muted-foreground">{transaction.categoriaNome}</td>
-                    <td className="px-5 py-4"><span className={`rounded px-2 py-1 text-xs ${transaction.tipo === "RECEITA" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{transaction.tipo === "RECEITA" ? "Receita" : "Despesa"}</span></td>
+                    <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${transaction.tipo === "RECEITA" ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>{transaction.tipo === "RECEITA" ? "Receita" : "Despesa"}</span></td>
                     <td className={`px-5 py-4 text-sm font-bold text-right ${transaction.tipo === "RECEITA" ? "text-green-400" : "text-red-400"}`}>{transaction.tipo === "RECEITA" ? "+" : "-"} {formatCurrency(transaction.valor)}</td>
                     <td className="px-5 py-4"><div className="flex gap-2"><Button variant="ghost" size="icon-sm" onClick={() => openEdit(transaction)} aria-label="Editar"><Pencil /></Button><Button variant="ghost" size="icon-sm" className="text-red-400" onClick={() => setDeleteTarget(transaction)} aria-label="Excluir"><Trash2 /></Button></div></td>
                   </tr>

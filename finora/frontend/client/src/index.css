@@ -149,24 +149,11 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
 
@@ -177,16 +164,45 @@
 
   @media (min-width: 640px) {
     .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-left: 1.5rem;
       padding-right: 1.5rem;
     }
   }
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
   }
 }
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2A2A2A; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3F3F46; }
+
+/* ── Selection ───────────────────────────────────────────── */
+::selection { background: rgba(250, 204, 21, 0.2); color: #F9FAFB; }
+
+/* ── Smooth transitions everywhere ──────────────────────── */
+* { transition-property: background-color, border-color, color, opacity, box-shadow; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 120ms; }
+*:focus-visible { outline: 2px solid #FACC15; outline-offset: 2px; border-radius: 4px; }
+
+/* ── Card glow on hover ──────────────────────────────────── */
+.card-hover:hover { box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.15), 0 4px 20px rgba(0,0,0,0.4); }
+
+/* ── Gradient text ───────────────────────────────────────── */
+.text-gradient { background: linear-gradient(135deg, #FACC15, #FDE68A); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+/* ── Subtle glow for accent elements ─────────────────────── */
+.glow-accent { box-shadow: 0 0 20px rgba(250, 204, 21, 0.15); }
+
+/* ── Page fade in ────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fadeInUp 0.3s ease both; }

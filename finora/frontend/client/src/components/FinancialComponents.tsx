@@ -1,14 +1,8 @@
-/**
- * Componentes Financeiros da Finora
- * Design: Minimalismo Corporativo Sofisticado
- * - Cards financeiros com bordas sutis
- * - Barras de progresso em amarelo
- * - Indicadores de receita/despesa em verde/vermelho
- */
-
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Progress } from "./ui/progress";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Pencil, Trash2 } from "lucide-react";
 
 interface FinancialCardProps {
   title: string;
@@ -27,14 +21,21 @@ export function FinancialCard({
   variant = "default",
   className = "",
 }: FinancialCardProps) {
-  const variantClasses = {
+  const borderClasses = {
     default: "border-border",
-    income: "border-green-500/30 bg-green-500/5",
-    expense: "border-red-500/30 bg-red-500/5",
+    income: "border-green-500/20",
+    expense: "border-red-500/20",
     neutral: "border-border",
   };
 
-  const valueColorClasses = {
+  const iconBg = {
+    default: "bg-accent/10 text-accent",
+    income: "bg-green-500/10 text-green-400",
+    expense: "bg-red-500/10 text-red-400",
+    neutral: "bg-muted text-muted-foreground",
+  };
+
+  const valueColor = {
     default: "text-foreground",
     income: "text-green-400",
     expense: "text-red-400",
@@ -42,24 +43,22 @@ export function FinancialCard({
   };
 
   return (
-    <Card className={`${variantClasses[variant]} ${className}`}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            {title}
-          </CardTitle>
-          {icon && <span className="text-muted-foreground">{icon}</span>}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-1">
-          <p className={`text-3xl font-display font-bold ${valueColorClasses[variant]}`}>
-            {value}
-          </p>
-          {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+    <Card className={`${borderClasses[variant]} card-hover ${className}`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <p className="text-sm font-medium text-muted-foreground leading-tight">{title}</p>
+          {icon && (
+            <div className={`p-2 rounded-lg shrink-0 ${iconBg[variant]}`}>
+              {icon}
+            </div>
           )}
         </div>
+        <p className={`text-2xl font-display font-bold ${valueColor[variant]} tabular-nums`}>
+          {value}
+        </p>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-1.5 leading-tight">{subtitle}</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -88,66 +87,78 @@ export function GoalProgressCard({
 }: GoalProgressCardProps) {
   const percentage = target > 0 ? Math.min(Math.round((current / target) * 100), 100) : 0;
 
-  const statusColors = {
-    "in-progress": "bg-accent/20 text-accent",
-    completed: "bg-green-500/20 text-green-400",
-    paused: "bg-muted text-muted-foreground",
+  const statusConfig = {
+    "in-progress": { label: "Em andamento", cls: "bg-accent/15 text-accent border-accent/20" },
+    completed:     { label: "Concluída",    cls: "bg-green-500/15 text-green-400 border-green-500/20" },
+    paused:        { label: "Pausada",      cls: "bg-muted text-muted-foreground border-border" },
   };
 
+  const barColor =
+    status === "completed" ? "bg-green-400" :
+    percentage >= 80       ? "bg-accent" :
+                             "bg-accent/70";
+
   return (
-    <Card className="border-border hover:border-accent/50 transition-colors">
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div className="flex-1">
-            <CardTitle className="text-lg">{title}</CardTitle>
+    <Card className="border-border card-hover">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-heading font-bold text-foreground truncate">{title}</h3>
             {description && (
-              <p className="text-sm text-muted-foreground mt-1">{description}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{description}</p>
             )}
           </div>
-          <Badge className={statusColors[status]}>{status === "completed" ? "Concluída" : status === "paused" ? "Pausada" : "Em andamento"}</Badge>
+          <Badge className={`shrink-0 text-[10px] border ${statusConfig[status].cls}`}>
+            {statusConfig[status].label}
+          </Badge>
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Progress Bar */}
+
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">
+          <div className="flex items-end justify-between text-sm">
+            <span className="font-bold text-foreground tabular-nums">
               R$ {current.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-muted-foreground tabular-nums">
               R$ {target.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
           </div>
-          <Progress value={percentage} className="h-2" />
-          <p className="text-xs text-muted-foreground">{percentage}% concluído</p>
+          <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+          <p className="text-xs font-medium text-accent">{percentage}% concluído</p>
         </div>
 
-        {/* Deadline */}
         {deadline && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Prazo:</span>
-            <span className="text-foreground font-medium">{deadline}</span>
+          <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border pt-3">
+            <span>Prazo</span>
+            <span className="font-medium text-foreground">{deadline}</span>
           </div>
         )}
 
-        {/* Actions */}
         {(onEdit || onDelete) && (
-          <div className="flex gap-2 pt-2 border-t border-border">
+          <div className="flex gap-2 pt-1 border-t border-border">
             {onEdit && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1 text-accent hover:text-accent hover:bg-accent/10"
                 onClick={onEdit}
-                className="text-sm text-accent hover:text-accent/80 transition-colors"
               >
-                Editar
-              </button>
+                <Pencil size={13} /> Editar
+              </Button>
             )}
             {onDelete && (
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1 text-red-400 hover:text-red-400 hover:bg-red-500/10"
                 onClick={onDelete}
-                className="text-sm text-red-400 hover:text-red-500 transition-colors ml-auto"
               >
-                Excluir
-              </button>
+                <Trash2 size={13} /> Excluir
+              </Button>
             )}
           </div>
         )}
@@ -176,39 +187,34 @@ export function TransactionItem({
   onDelete,
 }: TransactionItemProps) {
   const isIncome = type === "income";
-  const amountColor = isIncome ? "text-green-400" : "text-red-400";
-  const amountSign = isIncome ? "+" : "-";
 
   return (
-    <div className="flex items-center justify-between p-4 border-b border-border last:border-b-0 hover:bg-secondary/30 transition-colors">
-      <div className="flex-1">
-        <p className="font-medium text-foreground">{description}</p>
-        <div className="flex items-center gap-2 mt-1">
-          <span className="text-xs text-muted-foreground">{date}</span>
-          <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded">
-            {category}
-          </span>
+    <div className="flex items-center justify-between px-5 py-3.5 border-b border-border last:border-b-0 hover:bg-secondary/30 transition-colors group">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`w-1.5 h-8 rounded-full shrink-0 ${isIncome ? "bg-green-500" : "bg-red-500"}`} />
+        <div className="min-w-0">
+          <p className="font-medium text-foreground text-sm truncate">{description}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-xs text-muted-foreground">{date}</span>
+            <span className="text-xs bg-secondary text-muted-foreground px-1.5 py-0.5 rounded">
+              {category}
+            </span>
+          </div>
         </div>
       </div>
-      <div className="flex items-center gap-4">
-        <span className={`font-display font-bold text-lg ${amountColor}`}>
-          {amountSign} R$ {amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+      <div className="flex items-center gap-3 shrink-0">
+        <span className={`font-display font-bold text-sm tabular-nums ${isIncome ? "text-green-400" : "text-red-400"}`}>
+          {isIncome ? "+" : "−"} R$ {amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
         </span>
         {(onEdit || onDelete) && (
-          <div className="flex gap-2">
+          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {onEdit && (
-              <button
-                onClick={onEdit}
-                className="text-xs text-accent hover:text-accent/80 transition-colors"
-              >
+              <button onClick={onEdit} className="text-xs text-accent hover:text-accent/80 px-2 py-1 rounded hover:bg-accent/10">
                 Editar
               </button>
             )}
             {onDelete && (
-              <button
-                onClick={onDelete}
-                className="text-xs text-red-400 hover:text-red-500 transition-colors"
-              >
+              <button onClick={onDelete} className="text-xs text-red-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-500/10">
                 Excluir
               </button>
             )}

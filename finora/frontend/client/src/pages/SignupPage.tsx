@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FinoraLogo } from "@/components/FinoraLogo";
 import { useFinora } from "@/contexts/FinoraContext";
+
+const strengthLabel = ["Fraca", "Média", "Forte"];
+const strengthColor = ["bg-red-500", "bg-yellow-500", "bg-green-500"];
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -21,11 +24,11 @@ export default function SignupPage() {
   const [, setLocation] = useLocation();
 
   const strength = useMemo(() => {
-    let score = 0;
-    if (password.length >= 8) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/\d/.test(password)) score++;
-    return score;
+    let s = 0;
+    if (password.length >= 8) s++;
+    if (/[A-Z]/.test(password)) s++;
+    if (/\d/.test(password)) s++;
+    return s;
   }, [password]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -63,54 +66,89 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 items-center">
-        <div className="hidden lg:block space-y-6 pr-10">
+      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-12 items-center">
+
+        {/* ── Left panel ─────────────────────────────────────── */}
+        <div className="hidden lg:flex flex-col justify-between h-full py-4 pr-8 space-y-10">
           <FinoraLogo size="lg" />
-          <h1 className="text-4xl font-display font-bold">Comece a organizar sua vida financeira hoje.</h1>
-          <div className="space-y-4 text-muted-foreground">
-            {["Registre receitas e despesas", "Acompanhe metas financeiras", "Visualize seu saldo com clareza"].map((benefit) => (
-              <div className="flex items-center gap-3" key={benefit}><CheckCircle2 className="text-accent" size={20} /><span>{benefit}</span></div>
-            ))}
+          <div className="space-y-6">
+            <h1 className="text-4xl font-display font-bold leading-tight">
+              Comece hoje a organizar<br />
+              <span className="text-gradient">sua vida financeira.</span>
+            </h1>
+            <p className="text-muted-foreground leading-relaxed">
+              Crie sua conta gratuitamente e tenha controle total sobre receitas,
+              despesas e metas financeiras.
+            </p>
+            <div className="space-y-3">
+              {[
+                "Registro de receitas e despesas",
+                "Metas financeiras com progresso visual",
+                "Importação de CSV com sugestão de categorias por IA",
+                "Dashboard com gráficos e filtros por período",
+              ].map((benefit) => (
+                <div key={benefit} className="flex items-start gap-3 text-sm text-muted-foreground">
+                  <CheckCircle2 className="text-green-400 shrink-0 mt-0.5" size={16} />
+                  {benefit}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <TrendingUp size={13} className="text-accent" />
+            Gratuito e sem cartão de crédito
           </div>
         </div>
 
-        <div className="w-full max-w-md mx-auto space-y-6">
-          <div className="lg:hidden flex justify-center"><FinoraLogo size="lg" /></div>
-          <div className="space-y-2">
-            <h2 className="text-3xl font-display font-bold text-foreground">Crie sua conta</h2>
-            <p className="text-muted-foreground">Comece a organizar suas finanças em poucos passos.</p>
+        {/* ── Form ───────────────────────────────────────────── */}
+        <div className="w-full max-w-md mx-auto space-y-6 animate-fade-in">
+          <div className="lg:hidden flex justify-center mb-2">
+            <FinoraLogo size="lg" />
           </div>
+          <div className="space-y-1.5">
+            <h2 className="text-2xl font-display font-bold text-foreground">Criar conta</h2>
+            <p className="text-sm text-muted-foreground">Comece a organizar suas finanças agora.</p>
+          </div>
+
           <Card className="border-border">
             <CardContent className="p-6">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome completo</Label>
-                  <Input id="name" autoComplete="name" placeholder="Seu nome" value={name} onChange={(event) => setName(event.target.value)} />
+                  <Input id="name" autoComplete="name" placeholder="Seu nome" value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" type="email" autoComplete="email" placeholder="seu@email.com" value={email} onChange={(event) => setEmail(event.target.value)} />
+                  <Input id="email" type="email" autoComplete="email" placeholder="seu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input id="password" type="password" autoComplete="new-password" placeholder="••••••••" value={password} onChange={(event) => setPassword(event.target.value)} />
+                  <Input id="password" type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres" value={password} onChange={(e) => setPassword(e.target.value)} />
                   {password && (
-                    <div className="flex gap-1 pt-1" aria-label="Força da senha">
-                      {[0, 1, 2].map((item) => <span key={item} className={`h-1.5 flex-1 rounded-full ${item < strength ? "bg-accent" : "bg-muted"}`} />)}
+                    <div className="space-y-1">
+                      <div className="flex gap-1">
+                        {[0, 1, 2].map((i) => (
+                          <span key={i} className={`h-1 flex-1 rounded-full transition-all ${i < strength ? strengthColor[strength - 1] : "bg-muted"}`} />
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">Força: {strengthLabel[strength - 1] ?? "Fraca"}</p>
                     </div>
                   )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirmar senha</Label>
-                  <Input id="confirmPassword" type="password" autoComplete="new-password" placeholder="••••••••" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+                  <Input id="confirmPassword" type="password" autoComplete="new-password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
                 </div>
-                <label className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <Checkbox checked={acceptedTerms} onCheckedChange={(checked) => setAcceptedTerms(checked === true)} className="mt-0.5" />
-                  Li e aceito os termos de uso da Finora.
+                <label className="flex items-start gap-2.5 text-sm text-muted-foreground cursor-pointer">
+                  <Checkbox checked={acceptedTerms} onCheckedChange={(v) => setAcceptedTerms(v === true)} className="mt-0.5" />
+                  <span>Li e aceito os <span className="text-accent">termos de uso</span> da Finora.</span>
                 </label>
-                <Button type="submit" className="w-full" disabled={loading}>{loading ? "Criando conta..." : "Criar conta"}</Button>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Criando conta..." : "Criar conta"}
+                </Button>
                 <p className="text-center text-sm text-muted-foreground">
-                  Já possui uma conta?{" "}<Link href="/login" className="text-accent hover:text-accent/80 transition-colors">Entrar</Link>
+                  Já possui uma conta?{" "}
+                  <Link href="/login" className="text-accent hover:text-accent/80 font-medium transition-colors">Entrar</Link>
                 </p>
               </form>
             </CardContent>

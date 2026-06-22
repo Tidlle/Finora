@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
+import { BarChart3, PieChart, Target, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,43 +22,59 @@ export default function LoginPage() {
       toast.error("Informe seu e-mail e sua senha.");
       return;
     }
-
     setLoading(true);
     const result = await login(email, password);
     setLoading(false);
-
     if (!result.ok) {
       toast.error(result.message);
       return;
     }
-
     toast.success("Login realizado com sucesso.");
     setLocation("/dashboard");
   }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-8 items-center">
-        <div className="hidden lg:block space-y-6 pr-8">
+      <div className="w-full max-w-5xl grid lg:grid-cols-2 gap-12 items-center">
+
+        {/* ── Left panel ─────────────────────────────────────── */}
+        <div className="hidden lg:flex flex-col justify-between h-full py-4 pr-8 space-y-10">
           <FinoraLogo size="lg" />
-          <h1 className="text-4xl font-display font-bold">Tenha clareza sobre cada decisão financeira.</h1>
-          <p className="text-muted-foreground text-lg">Acesse seu painel para acompanhar saldo, despesas e metas em um só lugar.</p>
-          <Card className="border-border bg-secondary/40">
-            <CardContent className="p-6 space-y-5">
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">API conectada</p>
-                <p className="text-3xl font-display font-bold text-accent mt-2">Finora</p>
-              </div>
-              <p className="text-sm text-muted-foreground">Entre com uma conta cadastrada pelo back-end Spring Boot.</p>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <h1 className="text-4xl font-display font-bold leading-tight">
+              Clareza sobre cada<br />
+              <span className="text-gradient">decisão financeira.</span>
+            </h1>
+            <p className="text-muted-foreground leading-relaxed">
+              Dashboard, metas, categorias e importação com IA — tudo em um painel seguro e moderno.
+            </p>
+            <div className="space-y-3">
+              {[
+                { icon: BarChart3, text: "Dashboard com gráficos e filtros" },
+                { icon: Target,    text: "Metas com progresso visual" },
+                { icon: PieChart,  text: "Categorias de receitas e despesas" },
+                { icon: Sparkles,  text: "IA que sugere categorias no CSV" },
+              ].map(({ icon: Icon, text }) => (
+                <div key={text} className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <div className="w-7 h-7 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                    <Icon size={14} className="text-accent" />
+                  </div>
+                  {text}
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">© 2026 Finora</p>
         </div>
 
-        <div className="w-full max-w-md mx-auto space-y-6">
-          <div className="lg:hidden flex justify-center"><FinoraLogo size="lg" /></div>
-          <div className="space-y-2">
-            <h2 className="text-3xl font-display font-bold text-foreground">Bem-vindo de volta</h2>
-            <p className="text-muted-foreground">Entre para acompanhar suas finanças.</p>
+        {/* ── Form ───────────────────────────────────────────── */}
+        <div className="w-full max-w-md mx-auto space-y-6 animate-fade-in">
+          <div className="lg:hidden flex justify-center mb-2">
+            <FinoraLogo size="lg" />
+          </div>
+          <div className="space-y-1.5">
+            <h2 className="text-2xl font-display font-bold text-foreground">Bem-vindo de volta</h2>
+            <p className="text-sm text-muted-foreground">Entre para acompanhar suas finanças.</p>
           </div>
 
           <Card className="border-border">
@@ -65,19 +82,34 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email">E-mail</Label>
-                  <Input id="email" type="email" autoComplete="email" placeholder="seu@email.com" value={email} onChange={(event) => setEmail(event.target.value)} />
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input id="password" type="password" autoComplete="current-password" placeholder="••••••••" value={password} onChange={(event) => setPassword(event.target.value)} />
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
                 </div>
-                <div className="rounded-md bg-secondary p-3 text-xs text-muted-foreground">
-                  Use uma conta cadastrada pela API da Finora. A autenticação agora usa JWT.
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>{loading ? "Entrando..." : "Entrar"}</Button>
+                <Button type="submit" className="w-full mt-2" disabled={loading}>
+                  {loading ? "Entrando..." : "Entrar"}
+                </Button>
                 <p className="text-center text-sm text-muted-foreground">
-                  Ainda não possui uma conta?{" "}
-                  <Link href="/signup" className="text-accent hover:text-accent/80 transition-colors">Criar conta</Link>
+                  Não tem uma conta?{" "}
+                  <Link href="/signup" className="text-accent hover:text-accent/80 font-medium transition-colors">
+                    Criar conta
+                  </Link>
                 </p>
               </form>
             </CardContent>

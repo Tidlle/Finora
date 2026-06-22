@@ -8,16 +8,17 @@ import { listarMetas } from "@/services/metaService";
 import { classificarAlertasMetas } from "@/lib/metaAlertas";
 
 const mainItems = [
-  { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={20} /> },
-  { label: "Transações", href: "/transactions", icon: <Wallet size={20} /> },
-  { label: "Categorias", href: "/categories", icon: <Tag size={20} /> },
-  { label: "Metas", href: "/goals", icon: <Target size={20} /> },
-  { label: "Perfil", href: "/profile", icon: <User size={20} /> },
+  { label: "Dashboard",   href: "/dashboard",    icon: LayoutDashboard },
+  { label: "Transações",  href: "/transactions", icon: Wallet },
+  { label: "Categorias",  href: "/categories",   icon: Tag },
+  { label: "Metas",       href: "/goals",        icon: Target },
+  { label: "Projeções",   href: "/future",       icon: TrendingUp },
+  { label: "Perfil",      href: "/profile",      icon: User },
 ];
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
-  const { logout, isAuthenticated } = useFinora();
+  const { logout, isAuthenticated, currentUser } = useFinora();
   const [goalAlertCount, setGoalAlertCount] = useState(0);
 
   useEffect(() => {
@@ -25,10 +26,7 @@ export function Sidebar() {
     listarMetas()
       .then((metas) => {
         const alertas = classificarAlertasMetas(metas);
-        const urgentes = alertas.filter(
-          (a) => a.tipo === "vencida" || a.tipo === "prazoProximo"
-        );
-        setGoalAlertCount(urgentes.length);
+        setGoalAlertCount(alertas.filter((a) => a.tipo === "vencida" || a.tipo === "prazoProximo").length);
       })
       .catch(() => {});
   }, [isAuthenticated]);
@@ -38,29 +36,40 @@ export function Sidebar() {
     setLocation("/login");
   }
 
+  const initials = currentUser?.fullName
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase() ?? "FN";
+
   return (
     <>
-      <aside className="hidden lg:flex flex-col w-64 bg-background border-r border-border h-screen sticky top-0">
-        <div className="p-6 border-b border-border">
+      {/* ── Desktop sidebar ────────────────────────────────── */}
+      <aside className="hidden lg:flex flex-col w-60 bg-background border-r border-border h-screen sticky top-0">
+        <div className="px-5 py-5 border-b border-border">
           <FinoraLogo size="md" />
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2" aria-label="Navegação principal">
-          {mainItems.map((item) => {
-            const isActive = location === item.href;
-            const showBadge = item.href === "/goals" && goalAlertCount > 0;
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" aria-label="Navegação principal">
+          {mainItems.map(({ label, href, icon: Icon }) => {
+            const isActive = location === href || (href !== "/" && location.startsWith(href));
+            const showBadge = href === "/goals" && goalAlertCount > 0;
+
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-150 ${
-                  isActive ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-secondary"
+                key={href}
+                href={href}
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
                 }`}
               >
-                {item.icon}
-                <span className="font-medium text-sm">{item.label}</span>
+                <Icon size={17} className="shrink-0" />
+                <span>{label}</span>
                 {showBadge && (
-                  <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  <span className="ml-auto flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white min-w-[18px] px-1">
                     {goalAlertCount}
                   </span>
                 )}
@@ -69,44 +78,51 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="px-4 py-4 border-t border-border">
-          <p className="text-xs font-heading text-muted-foreground uppercase tracking-wider mb-3">Análise avançada</p>
-          <Link
-            href="/future"
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-150 ${
-              location === "/future" ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-secondary"
-            }`}
+        <div className="px-3 py-4 border-t border-border space-y-2">
+          {currentUser && (
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary/50 mb-1">
+              <div className="w-7 h-7 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                {initials}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{currentUser.fullName}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{currentUser.email}</p>
+              </div>
+            </div>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+            onClick={handleLogout}
           >
-            <TrendingUp size={20} />
-            <span className="font-medium text-sm">Projeções</span>
-          </Link>
-        </div>
-
-        <div className="p-4 border-t border-border">
-          <Button variant="outline" className="w-full" onClick={handleLogout}>
-            <LogOut size={18} />
-            Sair
+            <LogOut size={16} />
+            Sair da conta
           </Button>
         </div>
       </aside>
 
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 h-16 bg-background/95 backdrop-blur border-t border-border px-2" aria-label="Navegação mobile">
-        <div className="grid grid-cols-5 h-full">
-          {mainItems.map((item) => {
-            const isActive = location === item.href;
-            const showBadge = item.href === "/goals" && goalAlertCount > 0;
+      {/* ── Mobile bottom nav ──────────────────────────────── */}
+      <nav
+        className="lg:hidden fixed bottom-0 inset-x-0 z-50 h-16 bg-background/95 backdrop-blur border-t border-border"
+        aria-label="Navegação mobile"
+      >
+        <div className="grid grid-cols-5 h-full px-1">
+          {mainItems.slice(0, 5).map(({ label, href, icon: Icon }) => {
+            const isActive = location === href;
+            const showBadge = href === "/goals" && goalAlertCount > 0;
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                className={`relative flex flex-col items-center justify-center gap-1 text-[11px] transition-colors ${
+                key={href}
+                href={href}
+                className={`relative flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
                   isActive ? "text-accent" : "text-muted-foreground"
                 }`}
               >
-                {item.icon}
-                <span>{item.label}</span>
+                <Icon size={20} />
+                <span>{label}</span>
                 {showBadge && (
-                  <span className="absolute top-1 right-3 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+                  <span className="absolute top-2 right-3 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white">
                     {goalAlertCount}
                   </span>
                 )}

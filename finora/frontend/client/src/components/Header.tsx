@@ -1,15 +1,12 @@
-import { Bell } from "lucide-react";
-import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { useFinora } from "@/contexts/FinoraContext";
 
 interface HeaderProps {
   title: string;
   subtitle?: string;
-  showNotifications?: boolean;
 }
 
-export function Header({ title, subtitle, showNotifications = true }: HeaderProps) {
+export function Header({ title, subtitle }: HeaderProps) {
   const { currentUser } = useFinora();
   const initials = currentUser?.fullName
     .split(" ")
@@ -18,24 +15,38 @@ export function Header({ title, subtitle, showNotifications = true }: HeaderProp
     .join("")
     .toUpperCase() ?? "FN";
 
+  const hoje = new Date().toLocaleDateString("pt-BR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+
   return (
     <header className="bg-background/95 backdrop-blur border-b border-border sticky top-0 z-40">
-      <div className="px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
+      <div className="px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-display font-bold text-foreground truncate">{title}</h1>
-          {subtitle && <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>}
+          <h1 className="text-lg sm:text-xl font-display font-bold text-foreground truncate leading-tight">
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-          {showNotifications && (
-            <Button variant="ghost" size="icon" className="relative" title="Notificações — recurso futuro" disabled>
-              <Bell size={20} />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full" />
-            </Button>
-          )}
-          <Avatar className="w-9 h-9 sm:w-10 sm:h-10">
-            <AvatarFallback className="bg-accent text-accent-foreground font-bold">{initials}</AvatarFallback>
-          </Avatar>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="hidden sm:block text-xs text-muted-foreground capitalize">{hoje}</span>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block text-right">
+              <p className="text-xs font-medium text-foreground leading-tight">
+                {currentUser?.fullName?.split(" ")[0] ?? "Usuário"}
+              </p>
+            </div>
+            <Avatar className="w-8 h-8 sm:w-9 sm:h-9 ring-2 ring-border hover:ring-accent/50 transition-all cursor-pointer">
+              <AvatarFallback className="bg-accent text-accent-foreground font-bold text-sm">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+          </div>
         </div>
       </div>
     </header>
