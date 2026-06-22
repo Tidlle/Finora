@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Plus, Search, Pencil, Trash2, Receipt, Download } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Receipt, Download, Upload } from "lucide-react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +53,7 @@ const emptyForm: TransactionForm = {
 };
 
 export default function TransactionsPage() {
+  const [, setLocation] = useLocation();
   const [transactions, setTransactions] = useState<TransacaoResponse[]>([]);
   const [categories, setCategories] = useState<CategoriaResponse[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -260,6 +262,9 @@ export default function TransactionsPage() {
               <Trash2 size={15} /> Excluir {selectedIds.size} selecionada(s)
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={() => setLocation("/import")}>
+            <Upload size={15} /> Importar CSV
+          </Button>
           {transactions.length > 0 && (
             <Button variant="outline" size="sm" onClick={exportarCSV}>
               <Download size={15} /> Exportar CSV
