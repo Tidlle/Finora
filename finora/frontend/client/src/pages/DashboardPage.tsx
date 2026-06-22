@@ -241,7 +241,7 @@ export default function DashboardPage() {
   }, [revenueData]);
 
   return (
-    <AppShell title={`Olá, ${firstName} 👋`} subtitle="Aqui está o resumo das suas finanças.">
+    <AppShell title={`Olá, ${firstName}`} subtitle="Aqui está o resumo das suas finanças.">
 
       {/* ── Alertas ────────────────────────────────────────── */}
       {(alertasUrgentes.length > 0 || alertasPositivos.length > 0) && (
