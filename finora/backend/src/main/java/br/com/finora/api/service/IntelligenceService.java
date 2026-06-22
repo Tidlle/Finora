@@ -346,8 +346,17 @@ public class IntelligenceService {
             }
         }
 
+        // Fallback: keyword reconhecida mas nenhuma categoria combinou pelo nome —
+        // usa a primeira do tipo com confiança baixa para não deixar sem sugestão.
         if (melhor == null) {
-            return semSugestao(descricao);
+            melhor = doTipo.get(0);
+            return new IntelligenceSugestaoLoteItem(
+                    descricao,
+                    melhor.id(),
+                    melhor.nome(),
+                    0.4,
+                    "Palavra-chave \"" + palavraEncontrada + "\" reconhecida, mas nenhuma categoria com nome compatível. Sugestão genérica."
+            );
         }
 
         return new IntelligenceSugestaoLoteItem(
