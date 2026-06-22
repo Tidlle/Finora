@@ -146,6 +146,24 @@ public class IntelligenceService {
         PALAVRAS_CHAVE.put("freela", "receitas");
         PALAVRAS_CHAVE.put("bonus", "receitas");
         PALAVRAS_CHAVE.put("renda", "receitas");
+        // Outros / genérico (deve ficar por último para não sobrepor categorias específicas)
+        PALAVRAS_CHAVE.put("compra", "outros");
+    }
+
+    // Aliases: nomes alternativos que o usuário pode ter dado à categoria
+    private static final Map<String, List<String>> ALIASES_SEMANTICOS = new LinkedHashMap<>();
+
+    static {
+        ALIASES_SEMANTICOS.put("receitas",    List.of("receita", "entradas", "entrada", "renda", "ganhos", "ganho", "rendimentos"));
+        ALIASES_SEMANTICOS.put("salario",     List.of("salarios", "vencimento", "vencimentos", "remuneracao", "renda"));
+        ALIASES_SEMANTICOS.put("alimentacao", List.of("refeicao", "refeicoes", "comida", "gastronomia", "nutricao"));
+        ALIASES_SEMANTICOS.put("transporte",  List.of("mobilidade", "locomocao", "veiculos", "veiculo"));
+        ALIASES_SEMANTICOS.put("moradia",     List.of("habitacao", "residencia", "casa", "contas", "domicilio"));
+        ALIASES_SEMANTICOS.put("saude",       List.of("medico", "medica", "bem estar", "bem-estar", "saude e bem estar"));
+        ALIASES_SEMANTICOS.put("lazer",       List.of("entretenimento", "diversao", "hobby", "hobbies", "recreacao"));
+        ALIASES_SEMANTICOS.put("educacao",    List.of("ensino", "formacao", "aprendizado", "estudos", "conhecimento"));
+        ALIASES_SEMANTICOS.put("assinaturas", List.of("assinatura", "streaming", "subscricao", "servicos digitais"));
+        ALIASES_SEMANTICOS.put("outros",      List.of("outro", "geral", "gerais", "diversas", "diversos", "despesas", "compras", "outras", "miscelanea"));
     }
 
     private final CategoriaService categoriaService;
@@ -309,6 +327,21 @@ public class IntelligenceService {
                 if (nomeNorm.contains(catAlvo) || catAlvo.contains(nomeNorm)) {
                     melhor = c;
                     break;
+                }
+            }
+        }
+
+        // Tenta aliases semânticos (ex: "receitas" → "entradas", "renda", etc.)
+        if (melhor == null) {
+            List<String> aliases = ALIASES_SEMANTICOS.getOrDefault(catAlvo, List.of());
+            outer:
+            for (String alias : aliases) {
+                for (IntelligenceCategoriaDto c : doTipo) {
+                    String nomeNorm = normalizar(c.nome());
+                    if (nomeNorm.equals(alias) || nomeNorm.contains(alias) || alias.contains(nomeNorm)) {
+                        melhor = c;
+                        break outer;
+                    }
                 }
             }
         }
