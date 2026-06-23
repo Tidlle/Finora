@@ -44,20 +44,20 @@ export function FinancialCard({
 
   return (
     <Card className={`${borderClasses[variant]} card-hover ${className}`}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3 mb-4">
+      <CardContent className="px-4 py-3.5">
+        <div className="flex items-start justify-between gap-3 mb-2.5">
           <p className="text-sm font-medium text-muted-foreground leading-tight">{title}</p>
           {icon && (
-            <div className={`p-2 rounded-lg shrink-0 ${iconBg[variant]}`}>
+            <div className={`p-1.5 rounded-lg shrink-0 ${iconBg[variant]}`}>
               {icon}
             </div>
           )}
         </div>
-        <p className={`text-2xl font-display font-bold ${valueColor[variant]} tabular-nums`}>
+        <p className={`text-xl font-display font-bold ${valueColor[variant]} tabular-nums`}>
           {value}
         </p>
         {subtitle && (
-          <p className="text-xs text-muted-foreground mt-1.5 leading-tight">{subtitle}</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-tight">{subtitle}</p>
         )}
       </CardContent>
     </Card>
