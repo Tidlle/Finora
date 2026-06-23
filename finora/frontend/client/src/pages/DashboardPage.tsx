@@ -266,7 +266,7 @@ export default function DashboardPage() {
   }, [revenueData]);
 
   return (
-    <AppShell title={`Olá, ${firstName}`} subtitle="Aqui está o resumo das suas finanças.">
+    <AppShell title={`Olá, ${firstName}`} subtitle="Aqui está o resumo das suas finanças." contentClassName="!space-y-4">
 
       {/* ── Alertas ────────────────────────────────────────── */}
       {(alertasUrgentes.length > 0 || alertasPositivos.length > 0) && (
@@ -346,7 +346,7 @@ export default function DashboardPage() {
       {/* ── Loading ────────────────────────────────────────── */}
       {loading ? (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i} className="border-border">
                 <CardContent className="p-5 space-y-3">
@@ -360,7 +360,7 @@ export default function DashboardPage() {
               </Card>
             ))}
           </div>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             {[0, 1].map((i) => (
               <Card key={i} className="border-border">
                 <CardHeader><Skeleton className="h-5 w-44" /></CardHeader>
@@ -372,7 +372,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* ── Metric cards ─────────────────────────────────── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             <FinancialCard
               title="Saldo do período"
               value={formatCurrency(dashboard?.saldo ?? 0)}
@@ -402,7 +402,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Charts ───────────────────────────────────────── */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
             {/* Receitas vs Despesas */}
             <Card className="border-border">
@@ -572,7 +572,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Recent + Goals ───────────────────────────────── */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <Card className="border-border">
               <CardHeader className="pb-0">
                 <CardTitle className="text-base">Últimas transações</CardTitle>
