@@ -3,9 +3,9 @@ import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieCha
 import { TrendingDown, TrendingUp, Wallet, Tag, AlertTriangle, CheckCircle, Clock, FileText, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
+import { DashboardDateFilter, type ModoFiltro } from "@/components/DashboardDateFilter";
 import { FinancialCard, GoalProgressCard, TransactionItem } from "@/components/FinancialComponents";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,8 +26,6 @@ import { listarMetas, type MetaResponse } from "@/services/metaService";
 import { listarCategorias, type CategoriaResponse } from "@/services/categoriaService";
 
 const chartColors = ["#FACC15", "#22C55E", "#38BDF8", "#A78BFA", "#FB923C", "#EF4444"];
-
-type ModoFiltro = "mes" | "periodo";
 
 function mesAtualPadrao() {
   const d = new Date();
@@ -295,41 +293,33 @@ export default function DashboardPage() {
       )}
 
       {/* ── Filtros ────────────────────────────────────────── */}
-      <div className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex rounded-lg border border-border overflow-hidden text-sm">
-            <button
-              className={`px-3.5 py-2 text-sm font-medium transition-colors ${modoFiltro === "mes" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-              onClick={() => setModoFiltro("mes")}
-            >Por mês</button>
-            <button
-              className={`px-3.5 py-2 text-sm font-medium border-l border-border transition-colors ${modoFiltro === "periodo" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-              onClick={() => setModoFiltro("periodo")}
-            >Período</button>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-start gap-3">
+          <DashboardDateFilter
+            modoFiltro={modoFiltro}
+            onModoChange={setModoFiltro}
+            selectedMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
+            dataInicial={dataInicial}
+            dataFinal={dataFinal}
+            onDataInicialChange={setDataInicial}
+            onDataFinalChange={setDataFinal}
+          />
+
+          <div className="flex flex-wrap items-center gap-2.5 pt-0.5">
+            <select
+              value={categoriaFiltro ?? ""}
+              onChange={(e) => setCategoriaFiltro(e.target.value ? Number(e.target.value) : undefined)}
+              className="h-9 rounded-lg border border-[#27272A] bg-transparent px-3 text-sm text-foreground"
+            >
+              <option value="" className="bg-card">Todas as categorias</option>
+              {categorias.map((c) => <option key={c.id} value={c.id} className="bg-card">{c.nome}</option>)}
+            </select>
+
+            <Button variant="outline" size="sm" onClick={() => dashboard && gerarRelatorioHTML(dashboard, currentUser?.fullName ?? "Usuário", periodoLabel)} disabled={!dashboard}>
+              <FileText size={14} /> Exportar PDF
+            </Button>
           </div>
-
-          {modoFiltro === "mes" ? (
-            <Input type="month" aria-label="Mês" value={selectedMonth} onChange={(e) => e.target.value && setSelectedMonth(e.target.value)} className="w-44" />
-          ) : (
-            <div className="flex gap-2 flex-wrap items-center">
-              <Input type="date" aria-label="Data inicial" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)} className="w-40" />
-              <span className="text-muted-foreground text-sm">até</span>
-              <Input type="date" aria-label="Data final" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} className="w-40" />
-            </div>
-          )}
-
-          <select
-            value={categoriaFiltro ?? ""}
-            onChange={(e) => setCategoriaFiltro(e.target.value ? Number(e.target.value) : undefined)}
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
-          >
-            <option value="" className="bg-card">Todas as categorias</option>
-            {categorias.map((c) => <option key={c.id} value={c.id} className="bg-card">{c.nome}</option>)}
-          </select>
-
-          <Button variant="outline" size="sm" onClick={() => dashboard && gerarRelatorioHTML(dashboard, currentUser?.fullName ?? "Usuário", periodoLabel)} disabled={!dashboard}>
-            <FileText size={14} /> Exportar PDF
-          </Button>
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground capitalize">
