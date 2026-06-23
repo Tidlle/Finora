@@ -16,7 +16,7 @@ export function AppShell({ title, subtitle, children, contentClassName }: AppShe
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         <Header title={title} subtitle={subtitle} />
         <main className="flex-1 overflow-auto pb-20 lg:pb-0">
-          <div className={`p-4 sm:p-6 space-y-6 ${contentClassName ?? ""}`}>{children}</div>
+          <div className={`p-4 space-y-6 ${contentClassName ?? ""}`}>{children}</div>
         </main>
       </div>
     </div>
