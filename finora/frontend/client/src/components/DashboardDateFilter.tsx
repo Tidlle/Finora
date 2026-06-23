@@ -91,7 +91,7 @@ function MonthPickerPopover({
 
 // ── MonthNavigator ──────────────────────────────────────────────────────────
 
-function MonthNavigator({
+export function MonthNavigator({
   value,
   onChange,
 }: {

@@ -3,6 +3,7 @@ import { Plus, Search, Pencil, Trash2, Receipt, Download, Upload } from "lucide-
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { AppShell } from "@/components/AppShell";
+import { MonthNavigator } from "@/components/DashboardDateFilter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -277,24 +278,40 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      <Card className="border-border">
-        <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          <div className="relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar transação..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="pl-10" />
-          </div>
-          <Input aria-label="Filtrar por mês" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
-          <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as "all" | TipoTransacao)} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm text-foreground">
-            <option value="all" className="bg-card">Todos os tipos</option>
-            <option value="RECEITA" className="bg-card">Receitas</option>
-            <option value="DESPESA" className="bg-card">Despesas</option>
-          </select>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-9 rounded-md border border-input bg-transparent px-3 text-sm text-foreground">
-            <option value="all" className="bg-card">Todas as categorias</option>
-            {categories.map((category) => <option key={category.id} value={category.id} className="bg-card">{category.nome}</option>)}
-          </select>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#52525B]" />
+          <Input
+            placeholder="Buscar transação..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="pl-9 h-9 w-52 border-[#27272A]"
+          />
+        </div>
+
+        <MonthNavigator value={month} onChange={setMonth} />
+
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as "all" | TipoTransacao)}
+          className="h-9 rounded-lg border border-[#27272A] bg-transparent px-3 text-sm text-foreground"
+        >
+          <option value="all" className="bg-card">Todos os tipos</option>
+          <option value="RECEITA" className="bg-card">Receitas</option>
+          <option value="DESPESA" className="bg-card">Despesas</option>
+        </select>
+
+        <select
+          value={categoryFilter}
+          onChange={(event) => setCategoryFilter(event.target.value)}
+          className="h-9 rounded-lg border border-[#27272A] bg-transparent px-3 text-sm text-foreground"
+        >
+          <option value="all" className="bg-card">Todas as categorias</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id} className="bg-card">{category.nome}</option>
+          ))}
+        </select>
+      </div>
 
       {loading ? (
         <>
