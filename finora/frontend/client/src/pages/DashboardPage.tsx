@@ -295,55 +295,53 @@ export default function DashboardPage() {
       )}
 
       {/* ── Filtros ────────────────────────────────────────── */}
-      <Card className="border-border">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-lg border border-border overflow-hidden text-sm">
-              <button
-                className={`px-3.5 py-2 text-sm font-medium transition-colors ${modoFiltro === "mes" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                onClick={() => setModoFiltro("mes")}
-              >Por mês</button>
-              <button
-                className={`px-3.5 py-2 text-sm font-medium border-l border-border transition-colors ${modoFiltro === "periodo" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary"}`}
-                onClick={() => setModoFiltro("periodo")}
-              >Período</button>
+      <div className="flex flex-col gap-2.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-lg border border-border overflow-hidden text-sm">
+            <button
+              className={`px-3.5 py-2 text-sm font-medium transition-colors ${modoFiltro === "mes" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+              onClick={() => setModoFiltro("mes")}
+            >Por mês</button>
+            <button
+              className={`px-3.5 py-2 text-sm font-medium border-l border-border transition-colors ${modoFiltro === "periodo" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-secondary"}`}
+              onClick={() => setModoFiltro("periodo")}
+            >Período</button>
+          </div>
+
+          {modoFiltro === "mes" ? (
+            <Input type="month" aria-label="Mês" value={selectedMonth} onChange={(e) => e.target.value && setSelectedMonth(e.target.value)} className="w-44" />
+          ) : (
+            <div className="flex gap-2 flex-wrap items-center">
+              <Input type="date" aria-label="Data inicial" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)} className="w-40" />
+              <span className="text-muted-foreground text-sm">até</span>
+              <Input type="date" aria-label="Data final" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} className="w-40" />
             </div>
+          )}
 
-            {modoFiltro === "mes" ? (
-              <Input type="month" aria-label="Mês" value={selectedMonth} onChange={(e) => e.target.value && setSelectedMonth(e.target.value)} className="w-44" />
-            ) : (
-              <div className="flex gap-2 flex-wrap items-center">
-                <Input type="date" aria-label="Data inicial" value={dataInicial} onChange={(e) => setDataInicial(e.target.value)} className="w-40" />
-                <span className="text-muted-foreground text-sm">até</span>
-                <Input type="date" aria-label="Data final" value={dataFinal} onChange={(e) => setDataFinal(e.target.value)} className="w-40" />
-              </div>
-            )}
+          <select
+            value={categoriaFiltro ?? ""}
+            onChange={(e) => setCategoriaFiltro(e.target.value ? Number(e.target.value) : undefined)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
+          >
+            <option value="" className="bg-card">Todas as categorias</option>
+            {categorias.map((c) => <option key={c.id} value={c.id} className="bg-card">{c.nome}</option>)}
+          </select>
 
-            <select
-              value={categoriaFiltro ?? ""}
-              onChange={(e) => setCategoriaFiltro(e.target.value ? Number(e.target.value) : undefined)}
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm text-foreground"
-            >
-              <option value="" className="bg-card">Todas as categorias</option>
-              {categorias.map((c) => <option key={c.id} value={c.id} className="bg-card">{c.nome}</option>)}
-            </select>
+          <Button variant="outline" size="sm" onClick={() => dashboard && gerarRelatorioHTML(dashboard, currentUser?.fullName ?? "Usuário", periodoLabel)} disabled={!dashboard}>
+            <FileText size={14} /> Exportar PDF
+          </Button>
+        </div>
 
-            <Button variant="outline" size="sm" onClick={() => dashboard && gerarRelatorioHTML(dashboard, currentUser?.fullName ?? "Usuário", periodoLabel)} disabled={!dashboard}>
-              <FileText size={14} /> Exportar PDF
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-muted-foreground capitalize">
-            <Sparkles size={11} className="text-accent" />
-            {periodoLabel}
-            {categoriaFiltro && (
-              <Badge variant="secondary" className="text-xs ml-1">
-                {categorias.find((c) => c.id === categoriaFiltro)?.nome}
-              </Badge>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground capitalize">
+          <Sparkles size={11} className="text-accent" />
+          {periodoLabel}
+          {categoriaFiltro && (
+            <Badge variant="secondary" className="text-xs ml-1">
+              {categorias.find((c) => c.id === categoriaFiltro)?.nome}
+            </Badge>
+          )}
+        </div>
+      </div>
 
       {/* ── Loading ────────────────────────────────────────── */}
       {loading ? (
