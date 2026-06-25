@@ -24,7 +24,7 @@ import {
 } from "@/services/dashboardService";
 import { listarMetas, type MetaResponse } from "@/services/metaService";
 import { listarCategorias, type CategoriaResponse } from "@/services/categoriaService";
-import { buscarInsights, type InsightItem, type InsightsResponse, buscarAnomalias, type AnomaliaItem, type AnomaliasResponse } from "@/services/intelligenceService";
+import { buscarInsights, type InsightItem, type InsightsResponse } from "@/services/intelligenceService";
 
 const chartColors = ["#FACC15", "#22C55E", "#38BDF8", "#A78BFA", "#FB923C", "#EF4444"];
 
@@ -125,6 +125,9 @@ function InsightsSection({ insights, loading }: { insights: InsightsResponse | n
 
   if (!insights || insights.insights.length === 0) return null;
 
+  const apenasInfoInsight = insights.insights.length === 1 && insights.insights[0].tipo === "INFORMATIVO";
+  if (apenasInfoInsight) return null;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -135,99 +138,6 @@ function InsightsSection({ insights, loading }: { insights: InsightsResponse | n
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
         {insights.insights.map((item, i) => (
           <InsightCard key={i} item={item} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Anomalias components ─────────────────────────────────────────────────────
-
-const ANOMALIA_CONFIG: Record<string, { bg: string; border: string; badge: string; badgeText: string; icon: string }> = {
-  ALTA:  { bg: "bg-red-500/8",    border: "border-red-500/25",    badge: "bg-red-500/15 text-red-400 border border-red-500/25",    badgeText: "ALTA",  icon: "text-red-400" },
-  MEDIA: { bg: "bg-orange-500/8", border: "border-orange-500/25", badge: "bg-orange-500/15 text-orange-400 border border-orange-500/25", badgeText: "MÉDIA", icon: "text-orange-400" },
-  BAIXA: { bg: "bg-zinc-800/50",  border: "border-zinc-700",      badge: "bg-zinc-700/60 text-zinc-400 border border-zinc-600",    badgeText: "BAIXA", icon: "text-zinc-400" },
-};
-
-const ANOMALIA_TIPO_LABEL: Record<string, string> = {
-  TRANSACAO_INCOMUM:    "Despesa incomum",
-  CATEGORIA_EM_ALTA:    "Categoria em alta",
-  GASTO_ACIMA_DA_MEDIA: "Gastos acima da média",
-  CONCENTRACAO_DE_GASTOS: "Concentração de gastos",
-  INFORMATIVO:          "Informativo",
-};
-
-function AnomaliaCard({ item }: { item: AnomaliaItem }) {
-  const sev = (item.severidade ?? "BAIXA") as keyof typeof ANOMALIA_CONFIG;
-  const cfg = ANOMALIA_CONFIG[sev] ?? ANOMALIA_CONFIG.BAIXA;
-  const tipoLabel = ANOMALIA_TIPO_LABEL[item.tipo] ?? item.tipo;
-  const isInfo = item.tipo === "INFORMATIVO";
-
-  return (
-    <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${cfg.bg} ${cfg.border}`}>
-      <AlertTriangle size={14} className={`mt-0.5 shrink-0 ${isInfo ? "text-zinc-500" : cfg.icon}`} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-          <p className={`text-xs font-semibold ${isInfo ? "text-zinc-400" : cfg.icon}`}>{tipoLabel}</p>
-          {!isInfo && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${cfg.badge}`}>
-              {cfg.badgeText}
-            </span>
-          )}
-          {item.categoria && (
-            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md truncate max-w-[120px]">
-              {item.categoria}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">{item.mensagem}</p>
-      </div>
-    </div>
-  );
-}
-
-function AnomaliasSection({ anomalias, loading }: { anomalias: AnomaliasResponse | null; loading: boolean }) {
-  if (loading) {
-    return (
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <AlertTriangle size={13} className="text-orange-400" />
-          <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider">Alertas inteligentes</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-          {[0, 1].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
-        </div>
-      </div>
-    );
-  }
-
-  if (!anomalias || anomalias.anomalias.length === 0) return null;
-
-  // Se a única anomalia é informativa genérica "dentro do padrão", não exibir seção
-  const apenasOk = anomalias.anomalias.length === 1
-    && anomalias.anomalias[0].tipo === "INFORMATIVO"
-    && anomalias.anomalias[0].severidade === "BAIXA"
-    && anomalias.resumo?.totalAnomalias === 0;
-  if (apenasOk) return null;
-
-  const altas = anomalias.resumo?.anomaliasAltaSeveridade ?? 0;
-  const total = anomalias.resumo?.totalAnomalias ?? anomalias.anomalias.filter(a => a.tipo !== "INFORMATIVO").length;
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <AlertTriangle size={13} className="text-orange-400" />
-        <span className="text-xs font-semibold text-orange-400 uppercase tracking-wider">Alertas inteligentes</span>
-        {total > 0 && (
-          <span className="text-xs text-muted-foreground">
-            — {total} alerta{total > 1 ? "s" : ""} detectado{total > 1 ? "s" : ""}
-            {altas > 0 && <span className="text-red-400 font-medium ml-1">· {altas} alta severidade</span>}
-          </span>
-        )}
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-        {anomalias.anomalias.map((item, i) => (
-          <AnomaliaCard key={i} item={item} />
         ))}
       </div>
     </div>
@@ -337,8 +247,6 @@ export default function DashboardPage() {
   const [chartView, setChartView] = useState<"bar" | "area">("bar");
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
-  const [anomalias, setAnomalias] = useState<AnomaliasResponse | null>(null);
-  const [anomaliasLoading, setAnomaliasLoading] = useState(false);
 
   const filtros = useMemo((): FiltrosDashboard => {
     if (modoFiltro === "periodo" && dataInicial && dataFinal)
@@ -394,18 +302,6 @@ export default function DashboardPage() {
     return () => { ativo = false; };
   }, [filtros]);
 
-  useEffect(() => {
-    let ativo = true;
-    setAnomaliasLoading(true);
-    const params = filtros.mes
-      ? { mes: filtros.mes }
-      : { dataInicial: filtros.dataInicial, dataFinal: filtros.dataFinal };
-    buscarAnomalias(params)
-      .then((r) => { if (ativo) setAnomalias(r); })
-      .catch(() => { if (ativo) setAnomalias(null); })
-      .finally(() => { if (ativo) setAnomaliasLoading(false); });
-    return () => { ativo = false; };
-  }, [filtros]);
 
   const categoryData = useMemo(
     () => dashboard?.gastosPorCategoria.map((item, i) => ({
@@ -573,8 +469,6 @@ export default function DashboardPage() {
           {/* ── Insights ─────────────────────────────────────── */}
           <InsightsSection insights={insights} loading={insightsLoading} />
 
-          {/* ── Alertas inteligentes ─────────────────────────── */}
-          <AnomaliasSection anomalias={anomalias} loading={anomaliasLoading} />
 
           {/* ── Charts ───────────────────────────────────────── */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
