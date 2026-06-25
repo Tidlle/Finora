@@ -3,7 +3,11 @@ from typing import Optional
 
 
 def _fmt(valor: float) -> str:
-    return f"R$ {valor:_.2f}".replace("_", ".").replace(",", "X").replace(".", ",").replace("X", ".")
+    # Format Brazilian currency: 1234.56 → "R$ 1.234,56"
+    s = f"{valor:_.2f}"          # "1_234.56"
+    inteiro, decimais = s.split(".")
+    inteiro = inteiro.replace("_", ".")
+    return f"R$ {inteiro},{decimais}"
 
 
 def detectar_anomalias(
