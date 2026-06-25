@@ -24,7 +24,10 @@ import {
 } from "@/services/dashboardService";
 import { listarMetas, type MetaResponse } from "@/services/metaService";
 import { listarCategorias, type CategoriaResponse } from "@/services/categoriaService";
-import { buscarInsights, type InsightItem, type InsightsResponse } from "@/services/intelligenceService";
+import {
+  buscarInsights, type InsightItem, type InsightsResponse,
+  buscarAnomalias, type AnomaliaItem, type AnomaliasResponse,
+} from "@/services/intelligenceService";
 
 const chartColors = ["#FACC15", "#22C55E", "#38BDF8", "#A78BFA", "#FB923C", "#EF4444"];
 
@@ -86,13 +89,27 @@ ${dashboard.maiorCategoriaGasto ? `<p><strong>Maior categoria de gasto:</strong>
   w.print();
 }
 
-// ── Insights components ──────────────────────────────────────────────────────
+// ── Finora Intelligence (insights + anomalias unificados) ───────────────────
 
 const INSIGHT_CONFIG: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   POSITIVO:    { bg: "bg-green-500/8",  border: "border-green-500/20",  text: "text-green-400",  dot: "bg-green-400" },
   ALERTA:      { bg: "bg-yellow-500/8", border: "border-yellow-500/20", text: "text-yellow-400", dot: "bg-yellow-400" },
   NEGATIVO:    { bg: "bg-red-500/8",    border: "border-red-500/20",    text: "text-red-400",    dot: "bg-red-400" },
   INFORMATIVO: { bg: "bg-zinc-800/60",  border: "border-zinc-700",      text: "text-zinc-300",   dot: "bg-zinc-400" },
+};
+
+const ANOMALIA_CONFIG: Record<string, { bg: string; border: string; text: string; badge: string; badgeText: string }> = {
+  ALTA:  { bg: "bg-red-500/8",    border: "border-red-500/25",    text: "text-red-400",    badge: "bg-red-500/15 text-red-400 border border-red-500/25",    badgeText: "ALTA" },
+  MEDIA: { bg: "bg-orange-500/8", border: "border-orange-500/25", text: "text-orange-400", badge: "bg-orange-500/15 text-orange-400 border border-orange-500/25", badgeText: "MÉDIA" },
+  BAIXA: { bg: "bg-zinc-800/50",  border: "border-zinc-700",      text: "text-zinc-400",   badge: "bg-zinc-700/60 text-zinc-400 border border-zinc-600",    badgeText: "BAIXA" },
+};
+
+const ANOMALIA_TIPO_LABEL: Record<string, string> = {
+  TRANSACAO_INCOMUM:      "Despesa incomum",
+  CATEGORIA_EM_ALTA:      "Categoria em alta",
+  GASTO_ACIMA_DA_MEDIA:   "Gastos acima da média",
+  CONCENTRACAO_DE_GASTOS: "Concentração de gastos",
+  INFORMATIVO:            "Informativo",
 };
 
 function InsightCard({ item }: { item: InsightItem }) {
@@ -108,7 +125,48 @@ function InsightCard({ item }: { item: InsightItem }) {
   );
 }
 
-function InsightsSection({ insights, loading }: { insights: InsightsResponse | null; loading: boolean }) {
+function AnomaliaCard({ item }: { item: AnomaliaItem }) {
+  const sev = (item.severidade ?? "BAIXA") as keyof typeof ANOMALIA_CONFIG;
+  const cfg = ANOMALIA_CONFIG[sev] ?? ANOMALIA_CONFIG.BAIXA;
+  const tipoLabel = ANOMALIA_TIPO_LABEL[item.tipo] ?? item.tipo;
+  return (
+    <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${cfg.bg} ${cfg.border}`}>
+      <AlertTriangle size={14} className={`mt-0.5 shrink-0 ${cfg.text}`} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <p className={`text-xs font-semibold ${cfg.text}`}>{tipoLabel}</p>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${cfg.badge}`}>{cfg.badgeText}</span>
+          {item.categoria && (
+            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md truncate max-w-[120px]">
+              {item.categoria}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">{item.mensagem}</p>
+      </div>
+    </div>
+  );
+}
+
+function FinoraIntelligenceSection({
+  insights, insightsLoading,
+  anomalias, anomaliasLoading,
+}: {
+  insights: InsightsResponse | null; insightsLoading: boolean;
+  anomalias: AnomaliasResponse | null; anomaliasLoading: boolean;
+}) {
+  const loading = insightsLoading || anomaliasLoading;
+
+  const insightCards = (insights?.insights ?? []).filter(
+    (i) => i.tipo !== "INFORMATIVO"
+  );
+
+  const anomaliaCards = (anomalias?.anomalias ?? []).filter(
+    (a) => a.tipo !== "INFORMATIVO"
+  );
+
+  const temConteudo = insightCards.length > 0 || anomaliaCards.length > 0;
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -123,22 +181,25 @@ function InsightsSection({ insights, loading }: { insights: InsightsResponse | n
     );
   }
 
-  if (!insights || insights.insights.length === 0) return null;
+  if (!temConteudo) return null;
 
-  const apenasInfoInsight = insights.insights.length === 1 && insights.insights[0].tipo === "INFORMATIVO";
-  if (apenasInfoInsight) return null;
+  const altasSeveridade = anomaliaCards.filter((a) => a.severidade === "ALTA").length;
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Sparkles size={13} className="text-accent" />
         <span className="text-xs font-semibold text-accent uppercase tracking-wider">Finora Intelligence</span>
-        <span className="text-xs text-muted-foreground">— insights do período</span>
+        {anomaliaCards.length > 0 && (
+          <span className="text-xs text-muted-foreground">
+            — {anomaliaCards.length} alerta{anomaliaCards.length > 1 ? "s" : ""} detectado{anomaliaCards.length > 1 ? "s" : ""}
+            {altasSeveridade > 0 && <span className="text-red-400 font-medium ml-1">· {altasSeveridade} alta severidade</span>}
+          </span>
+        )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
-        {insights.insights.map((item, i) => (
-          <InsightCard key={i} item={item} />
-        ))}
+        {anomaliaCards.map((item, i) => <AnomaliaCard key={`a-${i}`} item={item} />)}
+        {insightCards.map((item, i) => <InsightCard key={`i-${i}`} item={item} />)}
       </div>
     </div>
   );
@@ -247,6 +308,8 @@ export default function DashboardPage() {
   const [chartView, setChartView] = useState<"bar" | "area">("bar");
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+  const [anomalias, setAnomalias] = useState<AnomaliasResponse | null>(null);
+  const [anomaliasLoading, setAnomaliasLoading] = useState(false);
 
   const filtros = useMemo((): FiltrosDashboard => {
     if (modoFiltro === "periodo" && dataInicial && dataFinal)
@@ -302,6 +365,18 @@ export default function DashboardPage() {
     return () => { ativo = false; };
   }, [filtros]);
 
+  useEffect(() => {
+    let ativo = true;
+    setAnomaliasLoading(true);
+    const params = filtros.mes
+      ? { mes: filtros.mes }
+      : { dataInicial: filtros.dataInicial, dataFinal: filtros.dataFinal };
+    buscarAnomalias(params)
+      .then((r) => { if (ativo) setAnomalias(r); })
+      .catch(() => { if (ativo) setAnomalias(null); })
+      .finally(() => { if (ativo) setAnomaliasLoading(false); });
+    return () => { ativo = false; };
+  }, [filtros]);
 
   const categoryData = useMemo(
     () => dashboard?.gastosPorCategoria.map((item, i) => ({
@@ -466,8 +541,11 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* ── Insights ─────────────────────────────────────── */}
-          <InsightsSection insights={insights} loading={insightsLoading} />
+          {/* ── Finora Intelligence ──────────────────────────── */}
+          <FinoraIntelligenceSection
+            insights={insights} insightsLoading={insightsLoading}
+            anomalias={anomalias} anomaliasLoading={anomaliasLoading}
+          />
 
 
           {/* ── Charts ───────────────────────────────────────── */}
