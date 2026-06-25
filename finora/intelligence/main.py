@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from services.categorizer import sugerir_categoria, sugerir_categorias_lote
 from services.insights import gerar_insights
+from services.anomalias import detectar_anomalias
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -90,6 +91,44 @@ class InsightsResponse(BaseModel):
     resumo: InsightsResumo | None
 
 
+# ── Schemas de anomalias ─────────────────────────────────────────────────────
+
+class TransacaoAnomalia(BaseModel):
+    descricao: str
+    valor: float
+    tipo: str
+    categoria: str | None = None
+    data: str | None = None
+
+
+class AnomaliasRequest(BaseModel):
+    periodoAtual: Periodo
+    periodoReferencia: Periodo | None = None
+    transacoesAtual: list[TransacaoAnomalia]
+    transacoesReferencia: list[TransacaoAnomalia] = []
+
+
+class AnomaliaItem(BaseModel):
+    tipo: str
+    categoria: str | None
+    descricao: str | None
+    valor: float | None
+    mensagem: str
+    severidade: str
+    percentualAcimaMedia: float | None
+
+
+class AnomaliasResumo(BaseModel):
+    totalAnomalias: int
+    anomaliasAltaSeveridade: int
+    categoriaMaisCritica: str | None
+
+
+class AnomaliasResponse(BaseModel):
+    anomalias: list[AnomaliaItem]
+    resumo: AnomaliasResumo | None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/status")
@@ -117,6 +156,20 @@ def sugerir_lote(request: LoteRequest):
         categorias_disponiveis=categorias,
     )
     return LoteResponse(sugestoes=[SugestaoLote(**s) for s in sugestoes])
+
+
+@app.post("/detectar-anomalias", response_model=AnomaliasResponse)
+def anomalias(request: AnomaliasRequest):
+    resultado = detectar_anomalias(
+        transacoes_atual=[t.model_dump() for t in request.transacoesAtual],
+        transacoes_referencia=[t.model_dump() for t in request.transacoesReferencia],
+        periodo_atual=request.periodoAtual.model_dump(),
+        periodo_referencia=request.periodoReferencia.model_dump() if request.periodoReferencia else {},
+    )
+    return AnomaliasResponse(
+        anomalias=[AnomaliaItem(**a) for a in resultado["anomalias"]],
+        resumo=AnomaliasResumo(**resultado["resumo"]) if resultado.get("resumo") else None,
+    )
 
 
 @app.post("/gerar-insights", response_model=InsightsResponse)

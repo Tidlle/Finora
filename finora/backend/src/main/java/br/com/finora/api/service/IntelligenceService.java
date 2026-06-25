@@ -5,6 +5,9 @@ import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.IntelligenceSugestaoLoteItem;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
+import br.com.finora.api.dto.AnomaliaItem;
+import br.com.finora.api.dto.AnomaliasResponse;
+import br.com.finora.api.dto.AnomaliasResumo;
 import br.com.finora.api.dto.InsightItem;
 import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.dto.InsightsResumo;
@@ -178,6 +181,15 @@ public class IntelligenceService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean pythonHabilitado;
     private final RestClient restClient;
+
+    private static final AnomaliasResponse ANOMALIAS_FALLBACK = new AnomaliasResponse(
+            List.of(new AnomaliaItem(
+                    "INFORMATIVO", null, null, null,
+                    "Não foi possível analisar gastos fora do padrão neste momento.",
+                    "BAIXA", null
+            )),
+            null
+    );
 
     private static final InsightsResponse INSIGHTS_FALLBACK = new InsightsResponse(
             List.of(new InsightItem(
@@ -491,6 +503,95 @@ public class IntelligenceService {
             log.warn("Erro ao gerar insights via Python: {}", e.getMessage());
             return INSIGHTS_FALLBACK;
         }
+    }
+
+    public AnomaliasResponse detectarAnomalias(Long usuarioId, LocalDate dataInicial, LocalDate dataFinal) {
+        if (!pythonHabilitado) return ANOMALIAS_FALLBACK;
+
+        try {
+            List<Transacao> txAtual = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, dataInicial, dataFinal.plusDays(1));
+
+            // Período de referência: 3 meses anteriores à data inicial
+            LocalDate fimRef = dataInicial.minusDays(1);
+            LocalDate iniRef = fimRef.minusMonths(3).withDayOfMonth(1);
+            List<Transacao> txRef = transacaoRepository.buscarPorPeriodo(usuarioId, iniRef, dataInicial);
+
+            ObjectNode payload = objectMapper.createObjectNode();
+
+            ObjectNode periodoAtual = payload.putObject("periodoAtual");
+            periodoAtual.put("dataInicial", dataInicial.toString());
+            periodoAtual.put("dataFinal", dataFinal.toString());
+
+            ObjectNode periodoRef = payload.putObject("periodoReferencia");
+            periodoRef.put("dataInicial", iniRef.toString());
+            periodoRef.put("dataFinal", fimRef.toString());
+
+            ArrayNode txAtualArr = payload.putArray("transacoesAtual");
+            for (Transacao t : txAtual) {
+                ObjectNode node = txAtualArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode txRefArr = payload.putArray("transacoesReferencia");
+            for (Transacao t : txRef) {
+                ObjectNode node = txRefArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            JsonNode resposta = restClient.post()
+                    .uri("/detectar-anomalias")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+
+            return parseAnomalias(resposta);
+
+        } catch (Exception e) {
+            log.warn("Erro ao detectar anomalias via Python: {}", e.getMessage());
+            return ANOMALIAS_FALLBACK;
+        }
+    }
+
+    private AnomaliasResponse parseAnomalias(JsonNode node) {
+        if (node == null) return ANOMALIAS_FALLBACK;
+
+        List<AnomaliaItem> itens = new ArrayList<>();
+        JsonNode arr = node.path("anomalias");
+        if (arr.isArray()) {
+            for (JsonNode a : arr) {
+                itens.add(new AnomaliaItem(
+                        a.path("tipo").asText("INFORMATIVO"),
+                        a.hasNonNull("categoria") ? a.get("categoria").asText() : null,
+                        a.hasNonNull("descricao") ? a.get("descricao").asText() : null,
+                        a.hasNonNull("valor") ? a.get("valor").asDouble() : null,
+                        a.path("mensagem").asText(""),
+                        a.path("severidade").asText("BAIXA"),
+                        a.hasNonNull("percentualAcimaMedia") ? a.get("percentualAcimaMedia").asDouble() : null
+                ));
+            }
+        }
+
+        AnomaliasResumo resumo = null;
+        JsonNode r = node.path("resumo");
+        if (!r.isMissingNode() && !r.isNull()) {
+            resumo = new AnomaliasResumo(
+                    r.path("totalAnomalias").asInt(0),
+                    r.path("anomaliasAltaSeveridade").asInt(0),
+                    r.hasNonNull("categoriaMaisCritica") ? r.get("categoriaMaisCritica").asText() : null
+            );
+        }
+
+        return new AnomaliasResponse(itens, resumo);
     }
 
     private InsightsResponse parseInsights(JsonNode node) {

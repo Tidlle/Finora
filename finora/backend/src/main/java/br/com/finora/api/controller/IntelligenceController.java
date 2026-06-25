@@ -1,5 +1,6 @@
 package br.com.finora.api.controller;
 
+import br.com.finora.api.dto.AnomaliasResponse;
 import br.com.finora.api.dto.IntelligenceLoteRequest;
 import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
@@ -49,6 +50,26 @@ public class IntelligenceController {
         return ResponseEntity.ok(
                 intelligenceService.sugerirCategoriasLote(usuarioId, request.transacoes())
         );
+    }
+
+    @GetMapping("/anomalias")
+    public ResponseEntity<AnomaliasResponse> anomalias(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String mes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicial,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFinal
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+
+        if (dataInicial != null && dataFinal != null) {
+            return ResponseEntity.ok(intelligenceService.detectarAnomalias(usuarioId, dataInicial, dataFinal));
+        }
+
+        YearMonth ym = (mes != null && !mes.isBlank())
+                ? YearMonth.parse(mes)
+                : YearMonth.now();
+        return ResponseEntity.ok(intelligenceService.detectarAnomalias(
+                usuarioId, ym.atDay(1), ym.atEndOfMonth()));
     }
 
     @GetMapping("/insights")
