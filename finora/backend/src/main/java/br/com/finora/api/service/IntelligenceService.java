@@ -211,9 +211,17 @@ public class IntelligenceService {
         this.pythonHabilitado = intelligenceUrl != null && !intelligenceUrl.isBlank();
 
         if (this.pythonHabilitado) {
+            // Timeout de 60s: Render free tier pode demorar até 50s para acordar
+            java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(60))
+                    .build();
+            org.springframework.http.client.JdkClientHttpRequestFactory factory =
+                    new org.springframework.http.client.JdkClientHttpRequestFactory(httpClient);
+            factory.setReadTimeout(java.time.Duration.ofSeconds(60));
             this.restClient = RestClient.builder()
                     .baseUrl(intelligenceUrl)
                     .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
+                    .requestFactory(factory)
                     .build();
             log.info("Finora Intelligence (Python) habilitado: {}", intelligenceUrl);
         } else {
