@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: finora-intelligence
+    runtime: docker
+    rootDir: finora/intelligence
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars: []
