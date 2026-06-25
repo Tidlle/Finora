@@ -37,3 +37,41 @@ export async function sugerirCategoriasLote(
   );
   return resposta.sugestoes;
 }
+
+// ── Insights ──────────────────────────────────────────────────────────────────
+
+export type InsightTipo = "POSITIVO" | "ALERTA" | "NEGATIVO" | "INFORMATIVO";
+export type InsightPrioridade = "ALTA" | "MEDIA" | "BAIXA";
+
+export type InsightItem = {
+  tipo: InsightTipo;
+  titulo: string;
+  mensagem: string;
+  prioridade: InsightPrioridade;
+};
+
+export type InsightsResumo = {
+  totalReceitas: number;
+  totalDespesas: number;
+  saldo: number;
+  maiorCategoriaDespesa: string | null;
+};
+
+export type InsightsResponse = {
+  insights: InsightItem[];
+  resumo: InsightsResumo | null;
+};
+
+export async function buscarInsights(params: {
+  mes?: string;
+  dataInicial?: string;
+  dataFinal?: string;
+}): Promise<InsightsResponse> {
+  const token = obterToken();
+  const query = new URLSearchParams();
+  if (params.mes) query.set("mes", params.mes);
+  if (params.dataInicial) query.set("dataInicial", params.dataInicial);
+  if (params.dataFinal) query.set("dataFinal", params.dataFinal);
+  const url = `/intelligence/insights${query.toString() ? `?${query}` : ""}`;
+  return apiRequest<InsightsResponse>(url, { method: "GET", token });
+}

@@ -4,15 +4,22 @@ import br.com.finora.api.dto.IntelligenceLoteRequest;
 import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
+import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.service.IntelligenceService;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
+import java.time.YearMonth;
 
 @RestController
 @RequestMapping("/intelligence")
@@ -42,5 +49,25 @@ public class IntelligenceController {
         return ResponseEntity.ok(
                 intelligenceService.sugerirCategoriasLote(usuarioId, request.transacoes())
         );
+    }
+
+    @GetMapping("/insights")
+    public ResponseEntity<InsightsResponse> insights(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String mes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicial,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFinal
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+
+        if (dataInicial != null && dataFinal != null) {
+            return ResponseEntity.ok(intelligenceService.gerarInsights(usuarioId, dataInicial, dataFinal));
+        }
+
+        YearMonth ym = (mes != null && !mes.isBlank())
+                ? YearMonth.parse(mes)
+                : YearMonth.now();
+        return ResponseEntity.ok(intelligenceService.gerarInsights(
+                usuarioId, ym.atDay(1), ym.atEndOfMonth()));
     }
 }

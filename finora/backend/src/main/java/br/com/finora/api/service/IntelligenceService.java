@@ -5,7 +5,12 @@ import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.IntelligenceSugestaoLoteItem;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
+import br.com.finora.api.dto.InsightItem;
+import br.com.finora.api.dto.InsightsResponse;
+import br.com.finora.api.dto.InsightsResumo;
+import br.com.finora.api.entity.Transacao;
 import br.com.finora.api.enums.TipoTransacao;
+import br.com.finora.api.repository.TransacaoRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -19,6 +24,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.text.Normalizer;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -167,14 +174,27 @@ public class IntelligenceService {
     }
 
     private final CategoriaService categoriaService;
+    private final TransacaoRepository transacaoRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean pythonHabilitado;
     private final RestClient restClient;
 
+    private static final InsightsResponse INSIGHTS_FALLBACK = new InsightsResponse(
+            List.of(new InsightItem(
+                    "INFORMATIVO",
+                    "Insights indisponíveis",
+                    "Não foi possível gerar insights automáticos neste momento.",
+                    "BAIXA"
+            )),
+            null
+    );
+
     public IntelligenceService(
             CategoriaService categoriaService,
+            TransacaoRepository transacaoRepository,
             @Value("${finora.intelligence.url:}") String intelligenceUrl
     ) {
+        this.transacaoRepository = transacaoRepository;
         this.categoriaService = categoriaService;
         this.pythonHabilitado = intelligenceUrl != null && !intelligenceUrl.isBlank();
 
@@ -408,6 +428,99 @@ public class IntelligenceService {
             ));
         }
         return new IntelligenceLoteResponse(itens);
+    }
+
+    // ── Insights ──────────────────────────────────────────────────────────────
+
+    public InsightsResponse gerarInsights(Long usuarioId, LocalDate dataInicial, LocalDate dataFinal) {
+        if (!pythonHabilitado) return INSIGHTS_FALLBACK;
+
+        try {
+            // Busca transações do período atual
+            List<Transacao> txAtual = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, dataInicial, dataFinal.plusDays(1));
+
+            // Calcula período anterior de mesmo tamanho
+            long diasPeriodo = dataInicial.until(dataFinal).getDays() + 1;
+            LocalDate iniAnterior = dataInicial.minusDays(diasPeriodo);
+            LocalDate fimAnterior = dataInicial.minusDays(1);
+            List<Transacao> txAnterior = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, iniAnterior, dataInicial);
+
+            // Monta payload
+            ObjectNode payload = objectMapper.createObjectNode();
+
+            ObjectNode periodoAtual = payload.putObject("periodoAtual");
+            periodoAtual.put("dataInicial", dataInicial.toString());
+            periodoAtual.put("dataFinal", dataFinal.toString());
+
+            ObjectNode periodoAnterior = payload.putObject("periodoAnterior");
+            periodoAnterior.put("dataInicial", iniAnterior.toString());
+            periodoAnterior.put("dataFinal", fimAnterior.toString());
+
+            ArrayNode txAtualArr = payload.putArray("transacoesAtual");
+            for (Transacao t : txAtual) {
+                ObjectNode node = txAtualArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode txAnteriorArr = payload.putArray("transacoesAnterior");
+            for (Transacao t : txAnterior) {
+                ObjectNode node = txAnteriorArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            JsonNode resposta = restClient.post()
+                    .uri("/gerar-insights")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+
+            return parseInsights(resposta);
+
+        } catch (Exception e) {
+            log.warn("Erro ao gerar insights via Python: {}", e.getMessage());
+            return INSIGHTS_FALLBACK;
+        }
+    }
+
+    private InsightsResponse parseInsights(JsonNode node) {
+        if (node == null) return INSIGHTS_FALLBACK;
+
+        List<InsightItem> items = new ArrayList<>();
+        JsonNode insightsArr = node.path("insights");
+        if (insightsArr.isArray()) {
+            for (JsonNode i : insightsArr) {
+                items.add(new InsightItem(
+                        i.path("tipo").asText("INFORMATIVO"),
+                        i.path("titulo").asText(""),
+                        i.path("mensagem").asText(""),
+                        i.path("prioridade").asText("BAIXA")
+                ));
+            }
+        }
+
+        InsightsResumo resumo = null;
+        JsonNode r = node.path("resumo");
+        if (!r.isMissingNode() && !r.isNull()) {
+            resumo = new InsightsResumo(
+                    r.path("totalReceitas").asDouble(0),
+                    r.path("totalDespesas").asDouble(0),
+                    r.path("saldo").asDouble(0),
+                    r.hasNonNull("maiorCategoriaDespesa") ? r.get("maiorCategoriaDespesa").asText() : null
+            );
+        }
+
+        return new InsightsResponse(items, resumo);
     }
 
     // ── Repositório de categorias ─────────────────────────────────────────────

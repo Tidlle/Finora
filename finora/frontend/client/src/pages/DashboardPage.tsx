@@ -24,6 +24,7 @@ import {
 } from "@/services/dashboardService";
 import { listarMetas, type MetaResponse } from "@/services/metaService";
 import { listarCategorias, type CategoriaResponse } from "@/services/categoriaService";
+import { buscarInsights, type InsightItem, type InsightsResponse } from "@/services/intelligenceService";
 
 const chartColors = ["#FACC15", "#22C55E", "#38BDF8", "#A78BFA", "#FB923C", "#EF4444"];
 
@@ -83,6 +84,61 @@ ${dashboard.maiorCategoriaGasto ? `<p><strong>Maior categoria de gasto:</strong>
   w.document.write(html);
   w.document.close();
   w.print();
+}
+
+// ── Insights components ──────────────────────────────────────────────────────
+
+const INSIGHT_CONFIG: Record<string, { bg: string; border: string; text: string; dot: string }> = {
+  POSITIVO:    { bg: "bg-green-500/8",  border: "border-green-500/20",  text: "text-green-400",  dot: "bg-green-400" },
+  ALERTA:      { bg: "bg-yellow-500/8", border: "border-yellow-500/20", text: "text-yellow-400", dot: "bg-yellow-400" },
+  NEGATIVO:    { bg: "bg-red-500/8",    border: "border-red-500/20",    text: "text-red-400",    dot: "bg-red-400" },
+  INFORMATIVO: { bg: "bg-zinc-800/60",  border: "border-zinc-700",      text: "text-zinc-300",   dot: "bg-zinc-400" },
+};
+
+function InsightCard({ item }: { item: InsightItem }) {
+  const cfg = INSIGHT_CONFIG[item.tipo] ?? INSIGHT_CONFIG.INFORMATIVO;
+  return (
+    <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${cfg.bg} ${cfg.border}`}>
+      <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+      <div>
+        <p className={`text-xs font-semibold ${cfg.text}`}>{item.titulo}</p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{item.mensagem}</p>
+      </div>
+    </div>
+  );
+}
+
+function InsightsSection({ insights, loading }: { insights: InsightsResponse | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Sparkles size={13} className="text-accent" />
+          <span className="text-xs font-semibold text-accent uppercase tracking-wider">Finora Intelligence</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  if (!insights || insights.insights.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Sparkles size={13} className="text-accent" />
+        <span className="text-xs font-semibold text-accent uppercase tracking-wider">Finora Intelligence</span>
+        <span className="text-xs text-muted-foreground">— insights do período</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+        {insights.insights.map((item, i) => (
+          <InsightCard key={i} item={item} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Chart helper components ─────────────────────────────────────────────────
@@ -186,6 +242,8 @@ export default function DashboardPage() {
   const [alertas, setAlertas] = useState<AlertaMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartView, setChartView] = useState<"bar" | "area">("bar");
+  const [insights, setInsights] = useState<InsightsResponse | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
 
   const filtros = useMemo((): FiltrosDashboard => {
     if (modoFiltro === "periodo" && dataInicial && dataFinal)
@@ -225,6 +283,19 @@ export default function DashboardPage() {
       }
     }
     carregar();
+    return () => { ativo = false; };
+  }, [filtros]);
+
+  useEffect(() => {
+    let ativo = true;
+    setInsightsLoading(true);
+    const params = filtros.mes
+      ? { mes: filtros.mes }
+      : { dataInicial: filtros.dataInicial, dataFinal: filtros.dataFinal };
+    buscarInsights(params)
+      .then((r) => { if (ativo) setInsights(r); })
+      .catch(() => { if (ativo) setInsights(null); })
+      .finally(() => { if (ativo) setInsightsLoading(false); });
     return () => { ativo = false; };
   }, [filtros]);
 
@@ -390,6 +461,9 @@ export default function DashboardPage() {
               icon={<Tag size={18} />}
             />
           </div>
+
+          {/* ── Insights ─────────────────────────────────────── */}
+          <InsightsSection insights={insights} loading={insightsLoading} />
 
           {/* ── Charts ───────────────────────────────────────── */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
