@@ -11,6 +11,9 @@ import br.com.finora.api.dto.AnomaliasResumo;
 import br.com.finora.api.dto.InsightItem;
 import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.dto.InsightsResumo;
+import br.com.finora.api.dto.ScoreComponente;
+import br.com.finora.api.dto.ScoreFinanceiroResponse;
+import br.com.finora.api.dto.ScoreIndicadores;
 import br.com.finora.api.dto.RecomendacaoEconomiaItem;
 import br.com.finora.api.dto.RecomendacaoEconomiaResumo;
 import br.com.finora.api.dto.RecomendacoesEconomiaResponse;
@@ -200,6 +203,19 @@ public class IntelligenceService {
                     "BAIXA", null
             )),
             null
+    );
+
+    private static final ScoreIndicadores SCORE_INDICADORES_VAZIO = new ScoreIndicadores(
+            0.0, 0.0, 0.0, false, 0, null, 0.0, 0, 0.0
+    );
+
+    private static final ScoreFinanceiroResponse SCORE_FALLBACK = new ScoreFinanceiroResponse(
+            0, "ATENCAO",
+            "Não foi possível calcular sua saúde financeira neste momento.",
+            List.of(),
+            List.of("Tente novamente mais tarde."),
+            SCORE_INDICADORES_VAZIO,
+            List.of()
     );
 
     private static final RecomendacoesEconomiaResponse ECONOMIAS_FALLBACK = new RecomendacoesEconomiaResponse(
@@ -672,6 +688,138 @@ public class IntelligenceService {
             log.warn("Erro ao gerar projeções via Python: {}", e.getMessage());
             return PROJECOES_FALLBACK;
         }
+    }
+
+    @Transactional
+    public ScoreFinanceiroResponse gerarScoreFinanceiro(Long usuarioId, LocalDate dataInicial, LocalDate dataFinal) {
+        if (!pythonHabilitado) return SCORE_FALLBACK;
+
+        try {
+            List<Transacao> txAtual = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, dataInicial, dataFinal.plusDays(1));
+
+            long diasPeriodo = dataInicial.until(dataFinal).getDays() + 1;
+            LocalDate iniAnterior = dataInicial.minusDays(diasPeriodo);
+            List<Transacao> txAnterior = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, iniAnterior, dataInicial);
+
+            double totalReceitas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.RECEITA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+            double totalDespesas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.DESPESA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+
+            var metas = metaService.listar(usuarioId, null);
+
+            ObjectNode payload = objectMapper.createObjectNode();
+
+            ObjectNode periodo = payload.putObject("periodo");
+            periodo.put("dataInicial", dataInicial.toString());
+            periodo.put("dataFinal", dataFinal.toString());
+
+            ObjectNode periodoAnt = payload.putObject("periodoAnterior");
+            periodoAnt.put("dataInicial", iniAnterior.toString());
+            periodoAnt.put("dataFinal", dataInicial.minusDays(1).toString());
+
+            payload.put("totalReceitas", totalReceitas);
+            payload.put("totalDespesas", totalDespesas);
+            payload.put("saldo", totalReceitas - totalDespesas);
+
+            ArrayNode txAtualArr = payload.putArray("transacoesAtual");
+            for (Transacao t : txAtual) {
+                ObjectNode node = txAtualArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode txAntArr = payload.putArray("transacoesAnteriores");
+            for (Transacao t : txAnterior) {
+                ObjectNode node = txAntArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode metasArr = payload.putArray("metas");
+            for (var m : metas) {
+                ObjectNode node = metasArr.addObject();
+                node.put("nome", m.nome());
+                node.put("valorAlvo", m.valorObjetivo().doubleValue());
+                node.put("valorAtual", m.valorAcumulado().doubleValue());
+                node.put("status", m.status().name());
+            }
+
+            // Anomalias: lista vazia — Python tolera ausência
+            payload.putArray("anomalias");
+
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+            String json = restClient.post()
+                    .uri("/calcular-score-financeiro")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payloadBytes)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseScore(objectMapper.readTree(json));
+
+        } catch (Exception e) {
+            log.warn("Erro ao calcular score financeiro via Python: {}", e.getMessage());
+            return SCORE_FALLBACK;
+        }
+    }
+
+    private ScoreFinanceiroResponse parseScore(JsonNode node) {
+        if (node == null) return SCORE_FALLBACK;
+
+        List<String> pontosFortes = new ArrayList<>();
+        JsonNode pfArr = node.path("pontosFortes");
+        if (pfArr.isArray()) pfArr.forEach(p -> pontosFortes.add(p.asText()));
+
+        List<String> pontosAtencao = new ArrayList<>();
+        JsonNode paArr = node.path("pontosAtencao");
+        if (paArr.isArray()) paArr.forEach(p -> pontosAtencao.add(p.asText()));
+
+        JsonNode ind = node.path("indicadores");
+        ScoreIndicadores indicadores = new ScoreIndicadores(
+                ind.path("taxaEconomia").asDouble(0),
+                ind.path("percentualDespesasSobreReceitas").asDouble(0),
+                ind.path("saldoMedioMensal").asDouble(0),
+                ind.path("riscoSaldoNegativo").asBoolean(false),
+                ind.path("quantidadeAnomalias").asInt(0),
+                ind.hasNonNull("maiorCategoriaDespesa") ? ind.get("maiorCategoriaDespesa").asText() : null,
+                ind.path("percentualMaiorCategoria").asDouble(0),
+                ind.path("metasAtivas").asInt(0),
+                ind.path("progressoMedioMetas").asDouble(0)
+        );
+
+        List<ScoreComponente> componentes = new ArrayList<>();
+        JsonNode compArr = node.path("componentes");
+        if (compArr.isArray()) {
+            for (JsonNode c : compArr) {
+                componentes.add(new ScoreComponente(
+                        c.path("nome").asText(""),
+                        c.path("pontuacao").asInt(0),
+                        c.path("pontuacaoMaxima").asInt(0),
+                        c.path("mensagem").asText("")
+                ));
+            }
+        }
+
+        return new ScoreFinanceiroResponse(
+                node.path("score").asInt(0),
+                node.path("classificacao").asText("ATENCAO"),
+                node.path("mensagemPrincipal").asText(""),
+                pontosFortes,
+                pontosAtencao,
+                indicadores,
+                componentes
+        );
     }
 
     @Transactional

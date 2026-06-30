@@ -28,6 +28,7 @@ import {
   buscarInsights, type InsightItem, type InsightsResponse,
   buscarAnomalias, type AnomaliaItem, type AnomaliasResponse,
   buscarRecomendacoesEconomia, type RecomendacaoEconomiaItem, type RecomendacoesEconomiaResponse,
+  buscarScoreFinanceiro, type ScoreFinanceiroResponse, type ScoreClassificacao,
 } from "@/services/intelligenceService";
 
 const chartColors = ["#FACC15", "#22C55E", "#38BDF8", "#A78BFA", "#FB923C", "#EF4444"];
@@ -201,6 +202,127 @@ function FinoraIntelligenceSection({
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
         {anomaliaCards.map((item, i) => <AnomaliaCard key={`a-${i}`} item={item} />)}
         {insightCards.map((item, i) => <InsightCard key={`i-${i}`} item={item} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── Score de saúde financeira ────────────────────────────────────────────────
+
+const SCORE_CONFIG: Record<ScoreClassificacao, { cor: string; bg: string; border: string; badge: string }> = {
+  EXCELENTE: { cor: "text-green-400",  bg: "bg-green-500/8",   border: "border-green-500/20",  badge: "bg-green-500/15 text-green-400 border border-green-500/20"  },
+  BOA:       { cor: "text-green-400",  bg: "bg-green-500/8",   border: "border-green-500/20",  badge: "bg-green-500/15 text-green-400 border border-green-500/20"  },
+  ATENCAO:   { cor: "text-yellow-400", bg: "bg-yellow-500/8",  border: "border-yellow-500/20", badge: "bg-yellow-500/15 text-yellow-400 border border-yellow-500/20" },
+  CRITICA:   { cor: "text-red-400",    bg: "bg-red-500/8",     border: "border-red-500/20",    badge: "bg-red-500/15 text-red-400 border border-red-500/20"         },
+};
+
+const CLASSIFICACAO_LABEL: Record<ScoreClassificacao, string> = {
+  EXCELENTE: "Excelente",
+  BOA:       "Boa",
+  ATENCAO:   "Atenção",
+  CRITICA:   "Crítica",
+};
+
+function ScoreFinanceiroSection({ data, loading }: { data: ScoreFinanceiroResponse | null; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <Sparkles size={13} className="text-accent" />
+          <span className="text-xs font-semibold text-accent uppercase tracking-wider">Saúde financeira</span>
+        </div>
+        <Skeleton className="h-36 rounded-xl" />
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const classificacao = (data.classificacao ?? "ATENCAO") as ScoreClassificacao;
+  const cfg = SCORE_CONFIG[classificacao] ?? SCORE_CONFIG.ATENCAO;
+  const label = CLASSIFICACAO_LABEL[classificacao] ?? classificacao;
+  const pct = Math.min(100, Math.max(0, data.score));
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Sparkles size={13} className="text-accent" />
+        <span className="text-xs font-semibold text-accent uppercase tracking-wider">Saúde financeira</span>
+      </div>
+
+      <div className={`rounded-xl border p-4 ${cfg.bg} ${cfg.border}`}>
+        {/* Header: score + badge + mensagem */}
+        <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+          {/* Score circular simples */}
+          <div className="flex flex-col items-center justify-center shrink-0 w-24">
+            <span className={`text-4xl font-bold tabular-nums ${cfg.cor}`}>{data.score}</span>
+            <span className="text-xs text-muted-foreground">/100</span>
+            <span className={`mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-md ${cfg.badge}`}>{label}</span>
+          </div>
+
+          {/* Barra de progresso + mensagem + listas */}
+          <div className="flex-1 space-y-3">
+            {/* Barra */}
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: classificacao === "CRITICA" ? "#EF4444" : classificacao === "ATENCAO" ? "#FACC15" : "#22C55E",
+                }}
+              />
+            </div>
+
+            {/* Mensagem principal */}
+            <p className="text-xs text-muted-foreground leading-relaxed">{data.mensagemPrincipal}</p>
+
+            {/* Pontos fortes + atenção lado a lado */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {data.pontosFortes.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-green-400 font-semibold mb-1">Pontos fortes</p>
+                  {data.pontosFortes.map((p, i) => (
+                    <div key={i} className="flex items-start gap-1.5 text-muted-foreground">
+                      <span className="text-green-400 shrink-0 mt-0.5">✓</span>
+                      <span>{p}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {data.pontosAtencao.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-yellow-400 font-semibold mb-1">Pontos de atenção</p>
+                  {data.pontosAtencao.map((p, i) => (
+                    <div key={i} className="flex items-start gap-1.5 text-muted-foreground">
+                      <span className="text-yellow-400 shrink-0 mt-0.5">!</span>
+                      <span>{p}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Indicadores rápidos */}
+            {data.indicadores && (
+              <div className="flex flex-wrap gap-3 pt-1 border-t border-white/5">
+                <span className="text-[11px] text-muted-foreground">
+                  Taxa de economia: <span className="text-foreground font-medium">{data.indicadores.taxaEconomia.toFixed(1)}%</span>
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  Despesas/Receitas: <span className="text-foreground font-medium">{data.indicadores.percentualDespesasSobreReceitas.toFixed(1)}%</span>
+                </span>
+                {data.indicadores.maiorCategoriaDespesa && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Maior gasto: <span className="text-foreground font-medium">{data.indicadores.maiorCategoriaDespesa} ({data.indicadores.percentualMaiorCategoria.toFixed(1)}%)</span>
+                  </span>
+                )}
+                <span className="text-[11px] text-muted-foreground">
+                  Metas ativas: <span className="text-foreground font-medium">{data.indicadores.metasAtivas}</span>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -395,6 +517,8 @@ export default function DashboardPage() {
   const [anomaliasLoading, setAnomaliasLoading] = useState(false);
   const [economias, setEconomias] = useState<RecomendacoesEconomiaResponse | null>(null);
   const [economiasLoading, setEconomiasLoading] = useState(false);
+  const [score, setScore] = useState<ScoreFinanceiroResponse | null>(null);
+  const [scoreLoading, setScoreLoading] = useState(false);
 
   const filtros = useMemo((): FiltrosDashboard => {
     if (modoFiltro === "periodo" && dataInicial && dataFinal)
@@ -460,6 +584,19 @@ export default function DashboardPage() {
       .then((r) => { if (ativo) setAnomalias(r); })
       .catch(() => { if (ativo) setAnomalias(null); })
       .finally(() => { if (ativo) setAnomaliasLoading(false); });
+    return () => { ativo = false; };
+  }, [filtros]);
+
+  useEffect(() => {
+    let ativo = true;
+    setScoreLoading(true);
+    const params = filtros.mes
+      ? { mes: filtros.mes }
+      : { dataInicial: filtros.dataInicial, dataFinal: filtros.dataFinal };
+    buscarScoreFinanceiro(params)
+      .then((r) => { if (ativo) setScore(r); })
+      .catch(() => { if (ativo) setScore(null); })
+      .finally(() => { if (ativo) setScoreLoading(false); });
     return () => { ativo = false; };
   }, [filtros]);
 
@@ -638,6 +775,9 @@ export default function DashboardPage() {
               icon={<Tag size={18} />}
             />
           </div>
+
+          {/* ── Score de saúde financeira ─────────────────────── */}
+          <ScoreFinanceiroSection data={score} loading={scoreLoading} />
 
           {/* ── Finora Intelligence ──────────────────────────── */}
           <FinoraIntelligenceSection

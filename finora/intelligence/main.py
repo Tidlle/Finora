@@ -5,6 +5,7 @@ from services.insights import gerar_insights
 from services.anomalias import detectar_anomalias
 from services.projecoes import projetar_financas
 from services.economias import sugerir_economias
+from services.score import calcular_score_financeiro
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -302,6 +303,107 @@ class EconomiasResumo(BaseModel):
 class EconomiasResponse(BaseModel):
     recomendacoes: list[RecomendacaoItem]
     resumo: EconomiasResumo
+
+
+# ── Schemas de score financeiro ───────────────────────────────────────────────
+
+class MetaScore(BaseModel):
+    nome: str | None = None
+    valorAlvo: float = 0.0
+    valorAtual: float = 0.0
+    status: str | None = None
+
+
+class AnomaliaScore(BaseModel):
+    tipo: str | None = None
+    categoria: str | None = None
+    severidade: str = "BAIXA"
+    valor: float | None = None
+
+
+class ProjecaoScore(BaseModel):
+    tendencia: str | None = None
+    riscoSaldoNegativo: bool = False
+    economiaMediaMensal: float = 0.0
+    saldoFinalProjetado: float = 0.0
+
+
+class RecomendacoesEconomiaScore(BaseModel):
+    economiaTotalPotencial: float = 0.0
+    categoriaComMaiorPotencial: str | None = None
+
+
+class TransacaoScore(BaseModel):
+    descricao: str | None = None
+    valor: float = 0.0
+    tipo: str = "DESPESA"
+    categoria: str | None = None
+    data: str | None = None
+
+
+class ScoreRequest(BaseModel):
+    periodo: PeriodoEconomia
+    periodoAnterior: PeriodoEconomia | None = None
+    totalReceitas: float = 0.0
+    totalDespesas: float = 0.0
+    saldo: float = 0.0
+    transacoesAtual: list[TransacaoScore] = []
+    transacoesAnteriores: list[TransacaoScore] = []
+    metas: list[MetaScore] = []
+    anomalias: list[AnomaliaScore] = []
+    projecao: ProjecaoScore | None = None
+    recomendacoesEconomia: RecomendacoesEconomiaScore | None = None
+
+
+class ScoreComponenteOut(BaseModel):
+    nome: str
+    pontuacao: int
+    pontuacaoMaxima: int
+    mensagem: str
+
+
+class ScoreIndicadoresOut(BaseModel):
+    taxaEconomia: float
+    percentualDespesasSobreReceitas: float
+    saldoMedioMensal: float
+    riscoSaldoNegativo: bool
+    quantidadeAnomalias: int
+    maiorCategoriaDespesa: str | None
+    percentualMaiorCategoria: float
+    metasAtivas: int
+    progressoMedioMetas: float
+
+
+class ScoreResponse(BaseModel):
+    score: int
+    classificacao: str
+    mensagemPrincipal: str
+    pontosFortes: list[str]
+    pontosAtencao: list[str]
+    indicadores: ScoreIndicadoresOut
+    componentes: list[ScoreComponenteOut]
+
+
+@app.post("/calcular-score-financeiro", response_model=ScoreResponse)
+def score_financeiro(request: ScoreRequest):
+    resultado = calcular_score_financeiro(
+        total_receitas=request.totalReceitas,
+        total_despesas=request.totalDespesas,
+        saldo=request.saldo,
+        transacoes_atual=[t.model_dump() for t in request.transacoesAtual],
+        metas=[m.model_dump() for m in request.metas],
+        anomalias=[a.model_dump() for a in request.anomalias],
+        projecao=request.projecao.model_dump() if request.projecao else None,
+    )
+    return ScoreResponse(
+        score=resultado["score"],
+        classificacao=resultado["classificacao"],
+        mensagemPrincipal=resultado["mensagemPrincipal"],
+        pontosFortes=resultado["pontosFortes"],
+        pontosAtencao=resultado["pontosAtencao"],
+        indicadores=ScoreIndicadoresOut(**resultado["indicadores"]),
+        componentes=[ScoreComponenteOut(**c) for c in resultado["componentes"]],
+    )
 
 
 @app.post("/sugerir-economias", response_model=EconomiasResponse)

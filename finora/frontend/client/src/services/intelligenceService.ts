@@ -162,6 +162,53 @@ export async function buscarProjecoesInteligentes(
   );
 }
 
+// ── Score financeiro ──────────────────────────────────────────────────────────
+
+export type ScoreClassificacao = "EXCELENTE" | "BOA" | "ATENCAO" | "CRITICA";
+
+export type ScoreIndicadores = {
+  taxaEconomia: number;
+  percentualDespesasSobreReceitas: number;
+  saldoMedioMensal: number;
+  riscoSaldoNegativo: boolean;
+  quantidadeAnomalias: number;
+  maiorCategoriaDespesa: string | null;
+  percentualMaiorCategoria: number;
+  metasAtivas: number;
+  progressoMedioMetas: number;
+};
+
+export type ScoreComponente = {
+  nome: string;
+  pontuacao: number;
+  pontuacaoMaxima: number;
+  mensagem: string;
+};
+
+export type ScoreFinanceiroResponse = {
+  score: number;
+  classificacao: ScoreClassificacao;
+  mensagemPrincipal: string;
+  pontosFortes: string[];
+  pontosAtencao: string[];
+  indicadores: ScoreIndicadores;
+  componentes: ScoreComponente[];
+};
+
+export async function buscarScoreFinanceiro(params: {
+  mes?: string;
+  dataInicial?: string;
+  dataFinal?: string;
+}): Promise<ScoreFinanceiroResponse> {
+  const token = obterToken();
+  const query = new URLSearchParams();
+  if (params.mes) query.set("mes", params.mes);
+  if (params.dataInicial) query.set("dataInicial", params.dataInicial);
+  if (params.dataFinal) query.set("dataFinal", params.dataFinal);
+  const url = `/intelligence/score-financeiro${query.toString() ? `?${query}` : ""}`;
+  return apiRequest<ScoreFinanceiroResponse>(url, { method: "GET", token });
+}
+
 // ── Recomendações de economia ─────────────────────────────────────────────────
 
 export type RecomendacaoTipo =
