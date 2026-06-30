@@ -251,13 +251,13 @@ public class IntelligenceService {
                     cat.put("tipo", c.tipo().name());
                 }
                 byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
-                JsonNode resposta = restClient.post()
+                String json = restClient.post()
                         .uri("/sugerir-categoria")
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(payloadBytes)
                         .retrieve()
-                        .body(JsonNode.class);
-                return extrairSugestao(resposta);
+                        .body(String.class);
+                return extrairSugestao(objectMapper.readTree(json));
             } catch (Exception e) {
                 log.warn("Python indisponível, usando classificador local: {}", e.getMessage());
             }
@@ -295,13 +295,13 @@ public class IntelligenceService {
                     cat.put("tipo", c.tipo().name());
                 }
                 byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
-                JsonNode resposta = restClient.post()
+                String json = restClient.post()
                         .uri("/sugerir-categorias-lote")
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(payloadBytes)
                         .retrieve()
-                        .body(JsonNode.class);
-                return extrairLote(resposta);
+                        .body(String.class);
+                return extrairLote(objectMapper.readTree(json));
             } catch (Exception e) {
                 log.warn("Python indisponível, usando classificador local: {}", e.getMessage());
             }
@@ -504,14 +504,14 @@ public class IntelligenceService {
             }
 
             byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
-            JsonNode resposta = restClient.post()
+            String json = restClient.post()
                     .uri("/gerar-insights")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payloadBytes)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(String.class);
 
-            return parseInsights(resposta);
+            return parseInsights(objectMapper.readTree(json));
 
         } catch (Exception e) {
             log.warn("Erro ao gerar insights via Python: {}", e.getMessage());
@@ -563,14 +563,14 @@ public class IntelligenceService {
             }
 
             byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
-            JsonNode resposta = restClient.post()
+            String json = restClient.post()
                     .uri("/detectar-anomalias")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payloadBytes)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(String.class);
 
-            return parseAnomalias(resposta);
+            return parseAnomalias(objectMapper.readTree(json));
 
         } catch (Exception e) {
             log.warn("Erro ao detectar anomalias via Python: {}", e.getMessage());
