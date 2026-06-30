@@ -108,6 +108,60 @@ export async function buscarAnomalias(params: {
   return apiRequest<AnomaliasResponse>(url, { method: "GET", token });
 }
 
+// ── Projeções inteligentes ────────────────────────────────────────────────────
+
+export type ProjecaoItem = {
+  mes: string;
+  receitasPrevistas: number;
+  despesasPrevistas: number;
+  saldoPrevisto: number;
+  saldoAcumulado: number;
+};
+
+export type ProjecaoTendencia = "POSITIVA" | "ESTAVEL" | "ATENCAO" | "NEGATIVA";
+
+export type ProjecaoAnalise = {
+  tendencia: ProjecaoTendencia;
+  riscoSaldoNegativo: boolean;
+  mesRiscoSaldoNegativo: string | null;
+  economiaMediaMensal: number;
+  mensagemPrincipal: string;
+  observacoes: string[];
+};
+
+export type ProjecaoCenario = {
+  nome: string;
+  descricao: string;
+  saldoFinalProjetado: number;
+  diferencaVsAtual: number;
+};
+
+export type ProjecaoMeta = {
+  nome: string;
+  valorAlvo: number;
+  valorAtual: number;
+  valorRestante: number;
+  mesesEstimadosParaConclusao: number | null;
+  mensagem: string;
+};
+
+export type ProjecoesInteligenteResponse = {
+  projecoes: ProjecaoItem[];
+  analise: ProjecaoAnalise;
+  cenarios: ProjecaoCenario[];
+  metas: ProjecaoMeta[];
+};
+
+export async function buscarProjecoesInteligentes(
+  meses: 3 | 6 | 12 = 6
+): Promise<ProjecoesInteligenteResponse> {
+  const token = obterToken();
+  return apiRequest<ProjecoesInteligenteResponse>(
+    `/intelligence/projecoes?meses=${meses}`,
+    { method: "GET", token }
+  );
+}
+
 export async function buscarInsights(params: {
   mes?: string;
   dataInicial?: string;

@@ -6,6 +6,7 @@ import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
 import br.com.finora.api.dto.InsightsResponse;
+import br.com.finora.api.dto.ProjecoesInteligenteResponse;
 import br.com.finora.api.service.IntelligenceService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -70,6 +71,15 @@ public class IntelligenceController {
                 : YearMonth.now();
         return ResponseEntity.ok(intelligenceService.detectarAnomalias(
                 usuarioId, ym.atDay(1), ym.atEndOfMonth()));
+    }
+
+    @GetMapping("/projecoes")
+    public ResponseEntity<ProjecoesInteligenteResponse> projecoes(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false, defaultValue = "6") int meses
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+        return ResponseEntity.ok(intelligenceService.gerarProjecoes(usuarioId, meses));
     }
 
     @GetMapping("/insights")

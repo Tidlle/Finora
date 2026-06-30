@@ -11,6 +11,11 @@ import br.com.finora.api.dto.AnomaliasResumo;
 import br.com.finora.api.dto.InsightItem;
 import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.dto.InsightsResumo;
+import br.com.finora.api.dto.ProjecaoInteligenteAnalise;
+import br.com.finora.api.dto.ProjecaoInteligenteCenario;
+import br.com.finora.api.dto.ProjecaoInteligenteItem;
+import br.com.finora.api.dto.ProjecaoInteligenteMeta;
+import br.com.finora.api.dto.ProjecoesInteligenteResponse;
 import br.com.finora.api.entity.Transacao;
 import br.com.finora.api.enums.TipoTransacao;
 import br.com.finora.api.repository.TransacaoRepository;
@@ -179,6 +184,7 @@ public class IntelligenceService {
     }
 
     private final CategoriaService categoriaService;
+    private final MetaService metaService;
     private final TransacaoRepository transacaoRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean pythonHabilitado;
@@ -193,6 +199,17 @@ public class IntelligenceService {
             null
     );
 
+    private static final ProjecoesInteligenteResponse PROJECOES_FALLBACK = new ProjecoesInteligenteResponse(
+            List.of(),
+            new ProjecaoInteligenteAnalise(
+                    "ESTAVEL", false, null, 0.0,
+                    "Não foi possível gerar projeções inteligentes neste momento.",
+                    List.of("Tente novamente mais tarde.")
+            ),
+            List.of(),
+            List.of()
+    );
+
     private static final InsightsResponse INSIGHTS_FALLBACK = new InsightsResponse(
             List.of(new InsightItem(
                     "INFORMATIVO",
@@ -205,11 +222,13 @@ public class IntelligenceService {
 
     public IntelligenceService(
             CategoriaService categoriaService,
+            MetaService metaService,
             TransacaoRepository transacaoRepository,
             @Value("${finora.intelligence.url:}") String intelligenceUrl
     ) {
         this.transacaoRepository = transacaoRepository;
         this.categoriaService = categoriaService;
+        this.metaService = metaService;
         this.pythonHabilitado = intelligenceUrl != null && !intelligenceUrl.isBlank();
 
         if (this.pythonHabilitado) {
@@ -576,6 +595,131 @@ public class IntelligenceService {
             log.warn("Erro ao detectar anomalias via Python: {}", e.getMessage());
             return ANOMALIAS_FALLBACK;
         }
+    }
+
+    @Transactional
+    public ProjecoesInteligenteResponse gerarProjecoes(Long usuarioId, int meses) {
+        if (!pythonHabilitado) return PROJECOES_FALLBACK;
+
+        try {
+            int mesesValido = (meses == 3 || meses == 6 || meses == 12) ? meses : 6;
+
+            // Últimos 6 meses de transações para histórico
+            LocalDate hoje = LocalDate.now();
+            LocalDate iniHistorico = hoje.minusMonths(6).withDayOfMonth(1);
+            List<Transacao> txHistorico = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, iniHistorico, hoje.plusDays(1));
+
+            // Saldo atual: soma de todas as transações do usuário
+            List<Transacao> todasTx = transacaoRepository.findAllByUsuario_IdOrderByDataTransacaoDescIdDesc(usuarioId);
+            double saldoAtual = todasTx.stream().mapToDouble(t -> {
+                double v = t.getValor().doubleValue();
+                return t.getTipo() == TipoTransacao.RECEITA ? v : -v;
+            }).sum();
+
+            // Metas do usuário
+            var metas = metaService.listar(usuarioId, null);
+
+            // Montar payload
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("mesesProjecao", mesesValido);
+            payload.put("dataBase", hoje.withDayOfMonth(1).toString());
+            payload.put("saldoAtual", saldoAtual);
+
+            ArrayNode txArr = payload.putArray("transacoesHistoricas");
+            for (Transacao t : txHistorico) {
+                ObjectNode node = txArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode metasArr = payload.putArray("metas");
+            for (var m : metas) {
+                ObjectNode node = metasArr.addObject();
+                node.put("nome", m.nome());
+                node.put("valorAlvo", m.valorObjetivo().doubleValue());
+                node.put("valorAtual", m.valorAcumulado().doubleValue());
+                node.put("status", m.status().name());
+            }
+
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+            String json = restClient.post()
+                    .uri("/projetar-financas")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payloadBytes)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseProjecoes(objectMapper.readTree(json));
+
+        } catch (Exception e) {
+            log.warn("Erro ao gerar projeções via Python: {}", e.getMessage());
+            return PROJECOES_FALLBACK;
+        }
+    }
+
+    private ProjecoesInteligenteResponse parseProjecoes(JsonNode node) {
+        if (node == null) return PROJECOES_FALLBACK;
+
+        List<ProjecaoInteligenteItem> projecoes = new ArrayList<>();
+        JsonNode arr = node.path("projecoes");
+        if (arr.isArray()) {
+            for (JsonNode p : arr) {
+                projecoes.add(new ProjecaoInteligenteItem(
+                        p.path("mes").asText(),
+                        p.path("receitasPrevistas").asDouble(0),
+                        p.path("despesasPrevistas").asDouble(0),
+                        p.path("saldoPrevisto").asDouble(0),
+                        p.path("saldoAcumulado").asDouble(0)
+                ));
+            }
+        }
+
+        JsonNode a = node.path("analise");
+        List<String> obs = new ArrayList<>();
+        JsonNode obsArr = a.path("observacoes");
+        if (obsArr.isArray()) obsArr.forEach(o -> obs.add(o.asText()));
+        ProjecaoInteligenteAnalise analise = new ProjecaoInteligenteAnalise(
+                a.path("tendencia").asText("ESTAVEL"),
+                a.path("riscoSaldoNegativo").asBoolean(false),
+                a.hasNonNull("mesRiscoSaldoNegativo") ? a.get("mesRiscoSaldoNegativo").asText() : null,
+                a.path("economiaMediaMensal").asDouble(0),
+                a.path("mensagemPrincipal").asText(""),
+                obs
+        );
+
+        List<ProjecaoInteligenteCenario> cenarios = new ArrayList<>();
+        JsonNode cenariosArr = node.path("cenarios");
+        if (cenariosArr.isArray()) {
+            for (JsonNode c : cenariosArr) {
+                cenarios.add(new ProjecaoInteligenteCenario(
+                        c.path("nome").asText(),
+                        c.path("descricao").asText(),
+                        c.path("saldoFinalProjetado").asDouble(0),
+                        c.path("diferencaVsAtual").asDouble(0)
+                ));
+            }
+        }
+
+        List<ProjecaoInteligenteMeta> metasResult = new ArrayList<>();
+        JsonNode metasArr = node.path("metas");
+        if (metasArr.isArray()) {
+            for (JsonNode m : metasArr) {
+                metasResult.add(new ProjecaoInteligenteMeta(
+                        m.path("nome").asText(),
+                        m.path("valorAlvo").asDouble(0),
+                        m.path("valorAtual").asDouble(0),
+                        m.path("valorRestante").asDouble(0),
+                        m.hasNonNull("mesesEstimadosParaConclusao") ? m.get("mesesEstimadosParaConclusao").asInt() : null,
+                        m.path("mensagem").asText("")
+                ));
+            }
+        }
+
+        return new ProjecoesInteligenteResponse(projecoes, analise, cenarios, metasResult);
     }
 
     private AnomaliasResponse parseAnomalias(JsonNode node) {

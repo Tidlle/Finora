@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from services.categorizer import sugerir_categoria, sugerir_categorias_lote
 from services.insights import gerar_insights
 from services.anomalias import detectar_anomalias
+from services.projecoes import projetar_financas
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -129,6 +130,71 @@ class AnomaliasResponse(BaseModel):
     resumo: AnomaliasResumo | None
 
 
+# ── Schemas de projeções ──────────────────────────────────────────────────────
+
+class TransacaoHistorica(BaseModel):
+    descricao: str | None = None
+    valor: float
+    tipo: str
+    categoria: str | None = None
+    data: str | None = None
+
+
+class MetaInput(BaseModel):
+    nome: str | None = None
+    valorAlvo: float = 0.0
+    valorAtual: float = 0.0
+    status: str | None = None
+
+
+class ProjecaoRequest(BaseModel):
+    mesesProjecao: int = 6
+    dataBase: str
+    saldoAtual: float = 0.0
+    transacoesHistoricas: list[TransacaoHistorica] = []
+    metas: list[MetaInput] = []
+
+
+class ProjecaoItem(BaseModel):
+    mes: str
+    receitasPrevistas: float
+    despesasPrevistas: float
+    saldoPrevisto: float
+    saldoAcumulado: float
+
+
+class ProjecaoAnalise(BaseModel):
+    tendencia: str
+    riscoSaldoNegativo: bool
+    mesRiscoSaldoNegativo: str | None
+    economiaMediaMensal: float
+    mensagemPrincipal: str
+    observacoes: list[str]
+
+
+class ProjecaoCenario(BaseModel):
+    nome: str
+    descricao: str
+    saldoFinalProjetado: float
+    diferencaVsAtual: float
+
+
+class ProjecaoMetaResult(BaseModel):
+    nome: str
+    valorAlvo: float
+    valorAtual: float
+    valorRestante: float
+    mesesEstimadosParaConclusao: int | None
+    mensagem: str
+
+
+class ProjecaoResponse(BaseModel):
+    projecoes: list[ProjecaoItem]
+    analise: ProjecaoAnalise
+    cenarios: list[ProjecaoCenario]
+    metas: list[ProjecaoMetaResult]
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/status")
@@ -169,6 +235,23 @@ def anomalias(request: AnomaliasRequest):
     return AnomaliasResponse(
         anomalias=[AnomaliaItem(**a) for a in resultado["anomalias"]],
         resumo=AnomaliasResumo(**resultado["resumo"]) if resultado.get("resumo") else None,
+    )
+
+
+@app.post("/projetar-financas", response_model=ProjecaoResponse)
+def projecoes(request: ProjecaoRequest):
+    resultado = projetar_financas(
+        meses_projecao=request.mesesProjecao,
+        data_base=request.dataBase,
+        saldo_atual=request.saldoAtual,
+        transacoes_historicas=[t.model_dump() for t in request.transacoesHistoricas],
+        metas=[m.model_dump() for m in request.metas],
+    )
+    return ProjecaoResponse(
+        projecoes=[ProjecaoItem(**p) for p in resultado["projecoes"]],
+        analise=ProjecaoAnalise(**resultado["analise"]),
+        cenarios=[ProjecaoCenario(**c) for c in resultado["cenarios"]],
+        metas=[ProjecaoMetaResult(**m) for m in resultado["metas"]],
     )
 
 
