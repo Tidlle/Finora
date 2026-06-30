@@ -6,6 +6,7 @@ from services.anomalias import detectar_anomalias
 from services.projecoes import projetar_financas
 from services.economias import sugerir_economias
 from services.score import calcular_score_financeiro
+from services.normalizer import normalizar_extrato
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -433,6 +434,79 @@ def economias(request: EconomiasRequest):
     return EconomiasResponse(
         recomendacoes=[RecomendacaoItem(**r) for r in resultado["recomendacoes"]],
         resumo=EconomiasResumo(**resultado["resumo"]),
+    )
+
+
+# ── Schemas de normalização de extrato ───────────────────────────────────────
+
+class TransacaoBruta(BaseModel):
+    linha: int = 0
+    dataOriginal: str = ""
+    descricaoOriginal: str = ""
+    valorOriginal: str = ""
+    tipoOriginal: str = ""
+    categoriaOriginal: str = ""
+
+
+class TransacaoExistente(BaseModel):
+    descricao: str = ""
+    valor: float = 0.0
+    tipo: str = ""
+    categoria: str | None = None
+    data: str = ""
+
+
+class NormalizarExtratoRequest(BaseModel):
+    transacoesBrutas: list[TransacaoBruta] = []
+    categoriasDisponiveis: list[CategoriaDisponivel] = []
+    preferenciasUsuario: list[PreferenciaUsuario] = []
+    transacoesExistentes: list[TransacaoExistente] = []
+
+
+class TransacaoNormalizada(BaseModel):
+    linha: int
+    descricaoOriginal: str
+    descricaoLimpa: str
+    dataOriginal: str
+    dataNormalizada: str | None
+    valorOriginal: str
+    valorNormalizado: float | None
+    tipoDetectado: str | None
+    categoriaSugeridaId: int | None
+    categoriaSugeridaNome: str | None
+    confianca: float
+    origemSugestao: str
+    possivelDuplicada: bool
+    motivoDuplicidade: str | None
+    status: str
+    mensagens: list[str]
+
+
+class ResumoNormalizacao(BaseModel):
+    totalLinhas: int
+    prontasParaImportar: int
+    precisamRevisao: int
+    possiveisDuplicadas: int
+    semCategoria: int
+    comErro: int
+
+
+class NormalizarExtratoResponse(BaseModel):
+    transacoesNormalizadas: list[TransacaoNormalizada]
+    resumo: ResumoNormalizacao
+
+
+@app.post("/normalizar-extrato", response_model=NormalizarExtratoResponse)
+def normalizar(request: NormalizarExtratoRequest):
+    resultado = normalizar_extrato(
+        transacoes_brutas=[t.model_dump() for t in request.transacoesBrutas],
+        categorias_disponiveis=[c.model_dump() for c in request.categoriasDisponiveis],
+        preferencias_usuario=[p.model_dump() for p in request.preferenciasUsuario],
+        transacoes_existentes=[e.model_dump() for e in request.transacoesExistentes],
+    )
+    return NormalizarExtratoResponse(
+        transacoesNormalizadas=[TransacaoNormalizada(**t) for t in resultado["transacoesNormalizadas"]],
+        resumo=ResumoNormalizacao(**resultado["resumo"]),
     )
 
 

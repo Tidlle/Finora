@@ -2,6 +2,11 @@ package br.com.finora.api.service;
 
 import br.com.finora.api.dto.IntelligenceCategoriaDto;
 import br.com.finora.api.dto.IntelligenceLoteResponse;
+import br.com.finora.api.dto.NormalizarExtratoRequest;
+import br.com.finora.api.dto.NormalizarExtratoResponse;
+import br.com.finora.api.dto.ResumoNormalizacaoDto;
+import br.com.finora.api.dto.TransacaoBrutaDto;
+import br.com.finora.api.dto.TransacaoNormalizadaDto;
 import br.com.finora.api.dto.IntelligenceSugestaoLoteItem;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
@@ -1074,6 +1079,150 @@ public class IntelligenceService {
             log.warn("Não foi possível incluir preferências do usuário no payload: {}", e.getMessage());
             payload.putArray("preferenciasUsuario");
         }
+    }
+
+    // ── Normalização de extrato ───────────────────────────────────────────────
+
+    private static final NormalizarExtratoResponse NORMALIZAR_FALLBACK_VAZIO =
+            new NormalizarExtratoResponse(List.of(), new ResumoNormalizacaoDto(0, 0, 0, 0, 0, 0));
+
+    @Transactional
+    public NormalizarExtratoResponse normalizarExtrato(Long usuarioId, NormalizarExtratoRequest request) {
+        List<IntelligenceCategoriaDto> categorias = buscarCategoriasDoUsuario(usuarioId);
+
+        // Transações recentes do usuário para detecção de duplicatas (últimos 90 dias)
+        LocalDate hoje = LocalDate.now();
+        List<Transacao> txRecentes = transacaoRepository.buscarPorPeriodo(
+                usuarioId, hoje.minusDays(90), hoje.plusDays(1));
+
+        if (pythonHabilitado) {
+            try {
+                ObjectNode payload = objectMapper.createObjectNode();
+
+                // transacoesBrutas
+                ArrayNode brutasArr = payload.putArray("transacoesBrutas");
+                for (TransacaoBrutaDto t : request.transacoesBrutas()) {
+                    ObjectNode node = brutasArr.addObject();
+                    node.put("linha", t.linha());
+                    node.put("dataOriginal", t.dataOriginal() != null ? t.dataOriginal() : "");
+                    node.put("descricaoOriginal", t.descricaoOriginal() != null ? t.descricaoOriginal() : "");
+                    node.put("valorOriginal", t.valorOriginal() != null ? t.valorOriginal() : "");
+                    node.put("tipoOriginal", t.tipoOriginal() != null ? t.tipoOriginal() : "");
+                    node.put("categoriaOriginal", t.categoriaOriginal() != null ? t.categoriaOriginal() : "");
+                }
+
+                // categoriasDisponiveis
+                ArrayNode catsArr = payload.putArray("categoriasDisponiveis");
+                for (IntelligenceCategoriaDto c : categorias) {
+                    ObjectNode node = catsArr.addObject();
+                    node.put("id", c.id());
+                    node.put("nome", c.nome());
+                    node.put("tipo", c.tipo().name());
+                }
+
+                // preferenciasUsuario
+                adicionarPreferenciasAoPayload(payload, usuarioId, null);
+
+                // transacoesExistentes
+                ArrayNode existentesArr = payload.putArray("transacoesExistentes");
+                for (Transacao t : txRecentes) {
+                    ObjectNode node = existentesArr.addObject();
+                    node.put("descricao", t.getDescricao());
+                    node.put("valor", t.getValor().doubleValue());
+                    node.put("tipo", t.getTipo().name());
+                    node.put("categoria", t.getCategoria().getNome());
+                    node.put("data", t.getDataTransacao().toString());
+                }
+
+                byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+                String json = restClient.post()
+                        .uri("/normalizar-extrato")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(payloadBytes)
+                        .retrieve()
+                        .body(String.class);
+
+                return parseNormalizacao(objectMapper.readTree(json), request.transacoesBrutas());
+
+            } catch (Exception e) {
+                log.warn("Python indisponível para normalização de extrato: {}", e.getMessage());
+            }
+        }
+
+        // Fallback: retorna linhas brutas com status REVISAR para revisão manual
+        return gerarFallbackNormalizacao(request.transacoesBrutas());
+    }
+
+    private NormalizarExtratoResponse parseNormalizacao(JsonNode node, List<TransacaoBrutaDto> brutas) {
+        if (node == null || !node.has("transacoesNormalizadas")) {
+            return gerarFallbackNormalizacao(brutas);
+        }
+
+        List<TransacaoNormalizadaDto> normalizadas = new ArrayList<>();
+        for (JsonNode t : node.get("transacoesNormalizadas")) {
+            List<String> mensagens = new ArrayList<>();
+            JsonNode msgsArr = t.path("mensagens");
+            if (msgsArr.isArray()) msgsArr.forEach(m -> mensagens.add(m.asText()));
+
+            normalizadas.add(new TransacaoNormalizadaDto(
+                    t.path("linha").asInt(0),
+                    t.path("descricaoOriginal").asText(""),
+                    t.path("descricaoLimpa").asText(""),
+                    t.path("dataOriginal").asText(""),
+                    t.hasNonNull("dataNormalizada") ? t.get("dataNormalizada").asText() : null,
+                    t.path("valorOriginal").asText(""),
+                    t.hasNonNull("valorNormalizado") ? t.get("valorNormalizado").asDouble() : null,
+                    t.hasNonNull("tipoDetectado") ? t.get("tipoDetectado").asText() : null,
+                    t.hasNonNull("categoriaSugeridaId") ? t.get("categoriaSugeridaId").asLong() : null,
+                    t.hasNonNull("categoriaSugeridaNome") ? t.get("categoriaSugeridaNome").asText() : null,
+                    t.path("confianca").asDouble(0.0),
+                    t.path("origemSugestao").asText("SEM_SUGESTAO"),
+                    t.path("possivelDuplicada").asBoolean(false),
+                    t.hasNonNull("motivoDuplicidade") ? t.get("motivoDuplicidade").asText() : null,
+                    t.path("status").asText("REVISAR"),
+                    mensagens
+            ));
+        }
+
+        JsonNode r = node.path("resumo");
+        ResumoNormalizacaoDto resumo = new ResumoNormalizacaoDto(
+                r.path("totalLinhas").asInt(0),
+                r.path("prontasParaImportar").asInt(0),
+                r.path("precisamRevisao").asInt(0),
+                r.path("possiveisDuplicadas").asInt(0),
+                r.path("semCategoria").asInt(0),
+                r.path("comErro").asInt(0)
+        );
+
+        return new NormalizarExtratoResponse(normalizadas, resumo);
+    }
+
+    private NormalizarExtratoResponse gerarFallbackNormalizacao(List<TransacaoBrutaDto> brutas) {
+        List<TransacaoNormalizadaDto> normalizadas = brutas.stream().map(t ->
+                new TransacaoNormalizadaDto(
+                        t.linha(),
+                        t.descricaoOriginal() != null ? t.descricaoOriginal() : "",
+                        t.descricaoOriginal() != null ? t.descricaoOriginal() : "",
+                        t.dataOriginal() != null ? t.dataOriginal() : "",
+                        null,
+                        t.valorOriginal() != null ? t.valorOriginal() : "",
+                        null,
+                        null,
+                        null,
+                        null,
+                        0.0,
+                        "SEM_SUGESTAO",
+                        false,
+                        null,
+                        "REVISAR",
+                        List.of("Não foi possível normalizar automaticamente. Revise esta linha manualmente.")
+                )
+        ).toList();
+
+        return new NormalizarExtratoResponse(
+                normalizadas,
+                new ResumoNormalizacaoDto(brutas.size(), 0, brutas.size(), 0, brutas.size(), 0)
+        );
     }
 
     // ── Repositório de categorias ─────────────────────────────────────────────

@@ -278,6 +278,61 @@ export async function registrarAprendizadoCategoria(
   });
 }
 
+// ── Smart Import / Normalização de extrato ────────────────────────────────────
+
+export type TransacaoBruta = {
+  linha: number;
+  dataOriginal: string;
+  descricaoOriginal: string;
+  valorOriginal: string;
+  tipoOriginal: string;
+  categoriaOriginal: string;
+};
+
+export type TransacaoNormalizada = {
+  linha: number;
+  descricaoOriginal: string;
+  descricaoLimpa: string;
+  dataOriginal: string;
+  dataNormalizada: string | null;
+  valorOriginal: string;
+  valorNormalizado: number | null;
+  tipoDetectado: string | null;
+  categoriaSugeridaId: number | null;
+  categoriaSugeridaNome: string | null;
+  confianca: number;
+  origemSugestao: string;
+  possivelDuplicada: boolean;
+  motivoDuplicidade: string | null;
+  status: "PRONTO" | "REVISAR" | "ERRO" | "IGNORAR";
+  mensagens: string[];
+};
+
+export type ResumoNormalizacao = {
+  totalLinhas: number;
+  prontasParaImportar: number;
+  precisamRevisao: number;
+  possiveisDuplicadas: number;
+  semCategoria: number;
+  comErro: number;
+};
+
+export type NormalizarExtratoResponse = {
+  transacoesNormalizadas: TransacaoNormalizada[];
+  resumo: ResumoNormalizacao;
+};
+
+export async function normalizarExtrato(
+  transacoesBrutas: TransacaoBruta[]
+): Promise<NormalizarExtratoResponse> {
+  const token = obterToken();
+  return apiRequest<NormalizarExtratoResponse>("/intelligence/normalizar-extrato", {
+    method: "POST",
+    body: { transacoesBrutas },
+    token,
+  });
+}
+
 export async function buscarInsights(params: {
   mes?: string;
   dataInicial?: string;
