@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { TrendingDown, TrendingUp, Wallet, Tag, AlertTriangle, CheckCircle, Clock, FileText, Sparkles } from "lucide-react";
+import { TrendingDown, TrendingUp, Wallet, Tag, AlertTriangle, CheckCircle, Clock, FileText, Sparkles, PiggyBank } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { DashboardDateFilter, type ModoFiltro } from "@/components/DashboardDateFilter";
@@ -27,6 +27,7 @@ import { listarCategorias, type CategoriaResponse } from "@/services/categoriaSe
 import {
   buscarInsights, type InsightItem, type InsightsResponse,
   buscarAnomalias, type AnomaliaItem, type AnomaliasResponse,
+  buscarRecomendacoesEconomia, type RecomendacaoEconomiaItem, type RecomendacoesEconomiaResponse,
 } from "@/services/intelligenceService";
 
 const chartColors = ["#FACC15", "#22C55E", "#38BDF8", "#A78BFA", "#FB923C", "#EF4444"];
@@ -205,6 +206,88 @@ function FinoraIntelligenceSection({
   );
 }
 
+// ── Recomendações de economia ────────────────────────────────────────────────
+
+const RECOMENDACAO_CONFIG: Record<string, { bg: string; border: string; text: string; badge: string; badgeText: string }> = {
+  ALTA:  { bg: "bg-yellow-500/8",  border: "border-yellow-500/25", text: "text-yellow-400", badge: "bg-yellow-500/15 text-yellow-400 border border-yellow-500/25", badgeText: "ALTA" },
+  MEDIA: { bg: "bg-blue-500/8",    border: "border-blue-500/20",   text: "text-blue-400",   badge: "bg-blue-500/15 text-blue-400 border border-blue-500/20",   badgeText: "MÉDIA" },
+  BAIXA: { bg: "bg-zinc-800/50",   border: "border-zinc-700",      text: "text-zinc-400",   badge: "bg-zinc-700/60 text-zinc-400 border border-zinc-600",    badgeText: "BAIXA" },
+};
+
+function RecomendacaoCard({ item }: { item: RecomendacaoEconomiaItem }) {
+  const cfg = RECOMENDACAO_CONFIG[item.prioridade] ?? RECOMENDACAO_CONFIG.BAIXA;
+  return (
+    <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${cfg.bg} ${cfg.border}`}>
+      <PiggyBank size={14} className={`mt-0.5 shrink-0 ${cfg.text}`} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+          <p className={`text-xs font-semibold ${cfg.text}`}>{item.titulo}</p>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${cfg.badge}`}>{cfg.badgeText}</span>
+          {item.categoria && (
+            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded-md truncate max-w-[120px]">
+              {item.categoria}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">{item.mensagem}</p>
+        {item.economiaEstimada > 0 && (
+          <p className="text-xs text-green-400 font-medium mt-1">
+            Economia estimada: {formatCurrency(item.economiaEstimada)}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecomendacoesEconomiaSection({
+  data,
+  loading,
+}: {
+  data: RecomendacoesEconomiaResponse | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <PiggyBank size={13} className="text-green-400" />
+          <span className="text-xs font-semibold text-green-400 uppercase tracking-wider">Oportunidades para economizar</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
+
+  const recomendacoes = (data?.recomendacoes ?? []).filter((r) => r.tipo !== "INFORMATIVO");
+  if (recomendacoes.length === 0) return null;
+
+  const resumo = data?.resumo;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <PiggyBank size={13} className="text-green-400" />
+        <span className="text-xs font-semibold text-green-400 uppercase tracking-wider">Oportunidades para economizar</span>
+        {resumo && resumo.economiaTotalPotencial > 0 && (
+          <span className="text-xs text-muted-foreground">
+            — economia potencial de{" "}
+            <span className="text-green-400 font-medium">{formatCurrency(resumo.economiaTotalPotencial)}</span>
+            {resumo.categoriaComMaiorPotencial && (
+              <> · maior potencial em <span className="text-green-400 font-medium">{resumo.categoriaComMaiorPotencial}</span></>
+            )}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+        {recomendacoes.map((item, i) => <RecomendacaoCard key={i} item={item} />)}
+      </div>
+    </div>
+  );
+}
+
 // ── Chart helper components ─────────────────────────────────────────────────
 
 function BarTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string }>; label?: string }) {
@@ -310,6 +393,8 @@ export default function DashboardPage() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [anomalias, setAnomalias] = useState<AnomaliasResponse | null>(null);
   const [anomaliasLoading, setAnomaliasLoading] = useState(false);
+  const [economias, setEconomias] = useState<RecomendacoesEconomiaResponse | null>(null);
+  const [economiasLoading, setEconomiasLoading] = useState(false);
 
   const filtros = useMemo((): FiltrosDashboard => {
     if (modoFiltro === "periodo" && dataInicial && dataFinal)
@@ -375,6 +460,19 @@ export default function DashboardPage() {
       .then((r) => { if (ativo) setAnomalias(r); })
       .catch(() => { if (ativo) setAnomalias(null); })
       .finally(() => { if (ativo) setAnomaliasLoading(false); });
+    return () => { ativo = false; };
+  }, [filtros]);
+
+  useEffect(() => {
+    let ativo = true;
+    setEconomiasLoading(true);
+    const params = filtros.mes
+      ? { mes: filtros.mes }
+      : { dataInicial: filtros.dataInicial, dataFinal: filtros.dataFinal };
+    buscarRecomendacoesEconomia(params)
+      .then((r) => { if (ativo) setEconomias(r); })
+      .catch(() => { if (ativo) setEconomias(null); })
+      .finally(() => { if (ativo) setEconomiasLoading(false); });
     return () => { ativo = false; };
   }, [filtros]);
 
@@ -546,6 +644,9 @@ export default function DashboardPage() {
             insights={insights} insightsLoading={insightsLoading}
             anomalias={anomalias} anomaliasLoading={anomaliasLoading}
           />
+
+          {/* ── Recomendações de economia ─────────────────────── */}
+          <RecomendacoesEconomiaSection data={economias} loading={economiasLoading} />
 
 
           {/* ── Charts ───────────────────────────────────────── */}

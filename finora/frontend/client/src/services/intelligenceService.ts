@@ -162,6 +162,55 @@ export async function buscarProjecoesInteligentes(
   );
 }
 
+// ── Recomendações de economia ─────────────────────────────────────────────────
+
+export type RecomendacaoTipo =
+  | "MAIOR_OPORTUNIDADE"
+  | "REDUCAO_CATEGORIA"
+  | "CATEGORIA_EM_CRESCIMENTO"
+  | "CONCENTRACAO_DE_GASTOS"
+  | "ECONOMIA_GERAL"
+  | "INFORMATIVO";
+
+export type RecomendacaoPrioridade = "ALTA" | "MEDIA" | "BAIXA";
+
+export type RecomendacaoEconomiaItem = {
+  tipo: RecomendacaoTipo;
+  categoria: string | null;
+  titulo: string;
+  mensagem: string;
+  economiaEstimada: number;
+  percentualReducaoSugerido: number;
+  percentualDaDespesaTotal: number;
+  prioridade: RecomendacaoPrioridade;
+};
+
+export type RecomendacaoEconomiaResumo = {
+  economiaTotalPotencial: number;
+  categoriaComMaiorPotencial: string | null;
+  percentualEconomiaSobreDespesas: number;
+  mensagemPrincipal: string;
+};
+
+export type RecomendacoesEconomiaResponse = {
+  recomendacoes: RecomendacaoEconomiaItem[];
+  resumo: RecomendacaoEconomiaResumo;
+};
+
+export async function buscarRecomendacoesEconomia(params: {
+  mes?: string;
+  dataInicial?: string;
+  dataFinal?: string;
+}): Promise<RecomendacoesEconomiaResponse> {
+  const token = obterToken();
+  const query = new URLSearchParams();
+  if (params.mes) query.set("mes", params.mes);
+  if (params.dataInicial) query.set("dataInicial", params.dataInicial);
+  if (params.dataFinal) query.set("dataFinal", params.dataFinal);
+  const url = `/intelligence/economias${query.toString() ? `?${query}` : ""}`;
+  return apiRequest<RecomendacoesEconomiaResponse>(url, { method: "GET", token });
+}
+
 export async function buscarInsights(params: {
   mes?: string;
   dataInicial?: string;

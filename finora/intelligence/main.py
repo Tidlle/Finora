@@ -4,6 +4,7 @@ from services.categorizer import sugerir_categoria, sugerir_categorias_lote
 from services.insights import gerar_insights
 from services.anomalias import detectar_anomalias
 from services.projecoes import projetar_financas
+from services.economias import sugerir_economias
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -252,6 +253,68 @@ def projecoes(request: ProjecaoRequest):
         analise=ProjecaoAnalise(**resultado["analise"]),
         cenarios=[ProjecaoCenario(**c) for c in resultado["cenarios"]],
         metas=[ProjecaoMetaResult(**m) for m in resultado["metas"]],
+    )
+
+
+# ── Schemas de sugestões de economia ─────────────────────────────────────────
+
+class PeriodoEconomia(BaseModel):
+    dataInicial: str
+    dataFinal: str
+
+
+class TransacaoEconomia(BaseModel):
+    descricao: str | None = None
+    valor: float
+    tipo: str
+    categoria: str | None = None
+    data: str | None = None
+
+
+class EconomiasRequest(BaseModel):
+    periodo: PeriodoEconomia
+    periodoAnterior: PeriodoEconomia | None = None
+    totalReceitas: float = 0.0
+    totalDespesas: float = 0.0
+    saldo: float = 0.0
+    transacoesAtual: list[TransacaoEconomia] = []
+    transacoesAnterior: list[TransacaoEconomia] = []
+
+
+class RecomendacaoItem(BaseModel):
+    tipo: str
+    categoria: str | None
+    titulo: str
+    mensagem: str
+    economiaEstimada: float
+    percentualReducaoSugerido: int
+    percentualDaDespesaTotal: float
+    prioridade: str
+
+
+class EconomiasResumo(BaseModel):
+    economiaTotalPotencial: float
+    categoriaComMaiorPotencial: str | None
+    percentualEconomiaSobreDespesas: float
+    mensagemPrincipal: str
+
+
+class EconomiasResponse(BaseModel):
+    recomendacoes: list[RecomendacaoItem]
+    resumo: EconomiasResumo
+
+
+@app.post("/sugerir-economias", response_model=EconomiasResponse)
+def economias(request: EconomiasRequest):
+    resultado = sugerir_economias(
+        transacoes_atual=[t.model_dump() for t in request.transacoesAtual],
+        transacoes_anterior=[t.model_dump() for t in request.transacoesAnterior],
+        total_receitas=request.totalReceitas,
+        total_despesas=request.totalDespesas,
+    )
+    return EconomiasResponse(
+        recomendacoes=[RecomendacaoItem(**r) for r in resultado["recomendacoes"]],
+        resumo=EconomiasResumo(**resultado["resumo"]),
     )
 
 

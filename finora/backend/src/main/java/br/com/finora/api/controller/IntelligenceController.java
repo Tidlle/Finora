@@ -7,6 +7,7 @@ import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
 import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.dto.ProjecoesInteligenteResponse;
+import br.com.finora.api.dto.RecomendacoesEconomiaResponse;
 import br.com.finora.api.service.IntelligenceService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -80,6 +81,26 @@ public class IntelligenceController {
     ) {
         Long usuarioId = Long.valueOf(jwt.getSubject());
         return ResponseEntity.ok(intelligenceService.gerarProjecoes(usuarioId, meses));
+    }
+
+    @GetMapping("/economias")
+    public ResponseEntity<RecomendacoesEconomiaResponse> economias(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String mes,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicial,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFinal
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+
+        if (dataInicial != null && dataFinal != null) {
+            return ResponseEntity.ok(intelligenceService.gerarRecomendacoesEconomia(usuarioId, dataInicial, dataFinal));
+        }
+
+        YearMonth ym = (mes != null && !mes.isBlank())
+                ? YearMonth.parse(mes)
+                : YearMonth.now();
+        return ResponseEntity.ok(intelligenceService.gerarRecomendacoesEconomia(
+                usuarioId, ym.atDay(1), ym.atEndOfMonth()));
     }
 
     @GetMapping("/insights")

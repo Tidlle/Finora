@@ -11,6 +11,9 @@ import br.com.finora.api.dto.AnomaliasResumo;
 import br.com.finora.api.dto.InsightItem;
 import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.dto.InsightsResumo;
+import br.com.finora.api.dto.RecomendacaoEconomiaItem;
+import br.com.finora.api.dto.RecomendacaoEconomiaResumo;
+import br.com.finora.api.dto.RecomendacoesEconomiaResponse;
 import br.com.finora.api.dto.ProjecaoInteligenteAnalise;
 import br.com.finora.api.dto.ProjecaoInteligenteCenario;
 import br.com.finora.api.dto.ProjecaoInteligenteItem;
@@ -197,6 +200,16 @@ public class IntelligenceService {
                     "BAIXA", null
             )),
             null
+    );
+
+    private static final RecomendacoesEconomiaResponse ECONOMIAS_FALLBACK = new RecomendacoesEconomiaResponse(
+            List.of(new RecomendacaoEconomiaItem(
+                    "INFORMATIVO", null,
+                    "Recomendações indisponíveis",
+                    "Não foi possível gerar recomendações de economia neste momento.",
+                    0.0, 0, 0.0, "BAIXA"
+            )),
+            new RecomendacaoEconomiaResumo(0.0, null, 0.0, "Tente novamente mais tarde.")
     );
 
     private static final ProjecoesInteligenteResponse PROJECOES_FALLBACK = new ProjecoesInteligenteResponse(
@@ -659,6 +672,110 @@ public class IntelligenceService {
             log.warn("Erro ao gerar projeções via Python: {}", e.getMessage());
             return PROJECOES_FALLBACK;
         }
+    }
+
+    @Transactional
+    public RecomendacoesEconomiaResponse gerarRecomendacoesEconomia(Long usuarioId, LocalDate dataInicial, LocalDate dataFinal) {
+        if (!pythonHabilitado) return ECONOMIAS_FALLBACK;
+
+        try {
+            List<Transacao> txAtual = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, dataInicial, dataFinal.plusDays(1));
+
+            long diasPeriodo = dataInicial.until(dataFinal).getDays() + 1;
+            LocalDate iniAnterior = dataInicial.minusDays(diasPeriodo);
+            List<Transacao> txAnterior = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, iniAnterior, dataInicial);
+
+            double totalReceitas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.RECEITA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+            double totalDespesas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.DESPESA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+
+            ObjectNode payload = objectMapper.createObjectNode();
+
+            ObjectNode periodo = payload.putObject("periodo");
+            periodo.put("dataInicial", dataInicial.toString());
+            periodo.put("dataFinal", dataFinal.toString());
+
+            ObjectNode periodoAnt = payload.putObject("periodoAnterior");
+            periodoAnt.put("dataInicial", iniAnterior.toString());
+            periodoAnt.put("dataFinal", dataInicial.minusDays(1).toString());
+
+            payload.put("totalReceitas", totalReceitas);
+            payload.put("totalDespesas", totalDespesas);
+            payload.put("saldo", totalReceitas - totalDespesas);
+
+            ArrayNode txAtualArr = payload.putArray("transacoesAtual");
+            for (Transacao t : txAtual) {
+                ObjectNode node = txAtualArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode txAntArr = payload.putArray("transacoesAnterior");
+            for (Transacao t : txAnterior) {
+                ObjectNode node = txAntArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+            String json = restClient.post()
+                    .uri("/sugerir-economias")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payloadBytes)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseEconomias(objectMapper.readTree(json));
+
+        } catch (Exception e) {
+            log.warn("Erro ao gerar recomendações de economia via Python: {}", e.getMessage());
+            return ECONOMIAS_FALLBACK;
+        }
+    }
+
+    private RecomendacoesEconomiaResponse parseEconomias(JsonNode node) {
+        if (node == null) return ECONOMIAS_FALLBACK;
+
+        List<RecomendacaoEconomiaItem> itens = new ArrayList<>();
+        JsonNode arr = node.path("recomendacoes");
+        if (arr.isArray()) {
+            for (JsonNode r : arr) {
+                itens.add(new RecomendacaoEconomiaItem(
+                        r.path("tipo").asText("INFORMATIVO"),
+                        r.hasNonNull("categoria") ? r.get("categoria").asText() : null,
+                        r.path("titulo").asText(""),
+                        r.path("mensagem").asText(""),
+                        r.path("economiaEstimada").asDouble(0),
+                        r.path("percentualReducaoSugerido").asInt(0),
+                        r.path("percentualDaDespesaTotal").asDouble(0),
+                        r.path("prioridade").asText("BAIXA")
+                ));
+            }
+        }
+
+        RecomendacaoEconomiaResumo resumo = new RecomendacaoEconomiaResumo(0.0, null, 0.0, "");
+        JsonNode r = node.path("resumo");
+        if (!r.isMissingNode() && !r.isNull()) {
+            resumo = new RecomendacaoEconomiaResumo(
+                    r.path("economiaTotalPotencial").asDouble(0),
+                    r.hasNonNull("categoriaComMaiorPotencial") ? r.get("categoriaComMaiorPotencial").asText() : null,
+                    r.path("percentualEconomiaSobreDespesas").asDouble(0),
+                    r.path("mensagemPrincipal").asText("")
+            );
+        }
+
+        return new RecomendacoesEconomiaResponse(itens, resumo);
     }
 
     private ProjecoesInteligenteResponse parseProjecoes(JsonNode node) {
