@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import jakarta.transaction.Transactional;
+
 import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -452,6 +454,7 @@ public class IntelligenceService {
 
     // ── Insights ──────────────────────────────────────────────────────────────
 
+    @Transactional
     public InsightsResponse gerarInsights(Long usuarioId, LocalDate dataInicial, LocalDate dataFinal) {
         if (!pythonHabilitado) return INSIGHTS_FALLBACK;
 
@@ -513,6 +516,7 @@ public class IntelligenceService {
         }
     }
 
+    @Transactional
     public AnomaliasResponse detectarAnomalias(Long usuarioId, LocalDate dataInicial, LocalDate dataFinal) {
         if (!pythonHabilitado) return ANOMALIAS_FALLBACK;
 
