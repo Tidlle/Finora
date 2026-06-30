@@ -1,15 +1,20 @@
 package br.com.finora.api.controller;
 
 import br.com.finora.api.dto.AnomaliasResponse;
+import br.com.finora.api.dto.AprendizadoCategoriaRequest;
+import br.com.finora.api.dto.AprendizadoCategoriaResponse;
 import br.com.finora.api.dto.IntelligenceLoteRequest;
 import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
 import br.com.finora.api.dto.InsightsResponse;
+import br.com.finora.api.dto.PreferenciasCategoriaResponse;
 import br.com.finora.api.dto.ProjecoesInteligenteResponse;
 import br.com.finora.api.dto.RecomendacoesEconomiaResponse;
 import br.com.finora.api.dto.ScoreFinanceiroResponse;
+import br.com.finora.api.enums.TipoTransacao;
 import br.com.finora.api.service.IntelligenceService;
+import br.com.finora.api.service.PreferenciaCategoriaService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -30,9 +35,14 @@ import java.time.YearMonth;
 public class IntelligenceController {
 
     private final IntelligenceService intelligenceService;
+    private final PreferenciaCategoriaService preferenciaCategoriaService;
 
-    public IntelligenceController(IntelligenceService intelligenceService) {
+    public IntelligenceController(
+            IntelligenceService intelligenceService,
+            PreferenciaCategoriaService preferenciaCategoriaService
+    ) {
         this.intelligenceService = intelligenceService;
+        this.preferenciaCategoriaService = preferenciaCategoriaService;
     }
 
     @PostMapping("/sugerir-categoria")
@@ -53,6 +63,25 @@ public class IntelligenceController {
         return ResponseEntity.ok(
                 intelligenceService.sugerirCategoriasLote(usuarioId, request.transacoes())
         );
+    }
+
+    @PostMapping("/aprendizado-categoria")
+    public ResponseEntity<AprendizadoCategoriaResponse> registrarAprendizado(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody AprendizadoCategoriaRequest request
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+        return ResponseEntity.ok(preferenciaCategoriaService.registrar(usuarioId, request));
+    }
+
+    @GetMapping("/preferencias-categorias")
+    public ResponseEntity<PreferenciasCategoriaResponse> listarPreferencias(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String tipo
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+        TipoTransacao tipoEnum = (tipo != null && !tipo.isBlank()) ? TipoTransacao.valueOf(tipo.toUpperCase()) : null;
+        return ResponseEntity.ok(preferenciaCategoriaService.listar(usuarioId, tipoEnum));
     }
 
     @GetMapping("/anomalias")

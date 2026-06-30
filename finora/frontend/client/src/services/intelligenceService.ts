@@ -258,6 +258,26 @@ export async function buscarRecomendacoesEconomia(params: {
   return apiRequest<RecomendacoesEconomiaResponse>(url, { method: "GET", token });
 }
 
+// ── Aprendizado de categoria ───────────────────────────────────────────────────
+
+export type AprendizadoCategoriaRequest = {
+  descricaoOriginal: string;
+  tipo: TipoTransacao;
+  categoriaId: number;
+  categoriaNome: string;
+};
+
+export async function registrarAprendizadoCategoria(
+  req: AprendizadoCategoriaRequest
+): Promise<void> {
+  const token = obterToken();
+  await apiRequest<unknown>("/intelligence/aprendizado-categoria", {
+    method: "POST",
+    body: req,
+    token,
+  });
+}
+
 export async function buscarInsights(params: {
   mes?: string;
   dataInicial?: string;

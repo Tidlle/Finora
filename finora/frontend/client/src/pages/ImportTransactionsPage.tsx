@@ -6,11 +6,14 @@ import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/finance";
 import { listarCategorias, type CategoriaResponse, type TipoTransacao } from "@/services/categoriaService";
 import { criarTransacao } from "@/services/transacaoService";
-import { sugerirCategoriasLote, type SugestaoLoteItem } from "@/services/intelligenceService";
+import {
+  sugerirCategoriasLote,
+  registrarAprendizadoCategoria,
+  type SugestaoLoteItem,
+} from "@/services/intelligenceService";
 
 type LinhaImport = {
   index: number;
@@ -23,6 +26,8 @@ type LinhaImport = {
   selecionada: boolean;
   erro: string | null;
   sugestao: SugestaoLoteItem | null;
+  // Categoria sugerida original (para detectar correção do usuário)
+  categoriaSugeridaId: number | null;
 };
 
 function detectarDelimitador(conteudo: string): string {
@@ -124,6 +129,7 @@ export default function ImportTransactionsPage() {
           selecionada: erros.length === 0,
           erro: erros.length > 0 ? erros.join("; ") : null,
           sugestao: null,
+          categoriaSugeridaId: null,
         };
       });
 
@@ -150,7 +156,6 @@ export default function ImportTransactionsPage() {
               const catSugerida = categorias.find((c) => c.id === sug.categoriaId);
               if (!catSugerida) return { ...l, sugestao: sug };
 
-              // Aplica sugestão automaticamente, mantendo o erro mas removendo o de categoria
               const erroAtualizado = l.erro
                 ?.split("; ")
                 .filter((e) => !e.startsWith("categoria"))
@@ -163,6 +168,8 @@ export default function ImportTransactionsPage() {
                 selecionada: !erroAtualizado,
                 erro: erroAtualizado,
                 sugestao: sug,
+                // Registra qual categoria foi sugerida automaticamente
+                categoriaSugeridaId: sug.categoriaId,
               };
             })
           );
@@ -218,6 +225,37 @@ export default function ImportTransactionsPage() {
     );
   }
 
+  async function registrarCorrecoes(selecionadas: LinhaImport[]) {
+    // Registra aprendizado apenas onde o usuário corrigiu a categoria sugerida
+    const correcoes = selecionadas.filter(
+      (l) =>
+        l.categoriaSugeridaId !== null &&
+        l.categoriaId !== null &&
+        l.categoriaId !== l.categoriaSugeridaId
+    );
+
+    if (correcoes.length === 0) return;
+
+    let registradas = 0;
+    for (const l of correcoes) {
+      try {
+        await registrarAprendizadoCategoria({
+          descricaoOriginal: l.descricao,
+          tipo: l.tipo,
+          categoriaId: l.categoriaId!,
+          categoriaNome: l.categoriaNome,
+        });
+        registradas++;
+      } catch {
+        // Aprendizado é melhoría — não bloqueia a importação
+      }
+    }
+
+    if (registradas > 0) {
+      toast.info(`Finora aprendeu ${registradas} preferência(s) de categoria com base nas suas correções.`);
+    }
+  }
+
   async function confirmarImportacao() {
     const selecionadas = linhas.filter((l) => l.selecionada && !l.erro && l.categoriaId);
     if (selecionadas.length === 0) {
@@ -243,6 +281,9 @@ export default function ImportTransactionsPage() {
         erros++;
       }
     }
+
+    // Registra correções de categoria após importar (não bloqueia em caso de erro)
+    await registrarCorrecoes(selecionadas);
 
     setImportando(false);
 
@@ -383,11 +424,17 @@ export default function ImportTransactionsPage() {
                           </select>
                           {l.sugestao?.categoriaId && (
                             <span
-                              className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded w-fit ${confiancaClasse(l.sugestao.confianca)}`}
+                              className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded w-fit ${
+                                l.categoriaId !== l.categoriaSugeridaId && l.categoriaSugeridaId !== null
+                                  ? "bg-blue-500/20 text-blue-400"
+                                  : confiancaClasse(l.sugestao.confianca)
+                              }`}
                               title={l.sugestao.motivo}
                             >
                               <Sparkles size={10} />
-                              IA · {confiancaLabel(l.sugestao.confianca)}
+                              {l.categoriaId !== l.categoriaSugeridaId && l.categoriaSugeridaId !== null
+                                ? "IA · Corrigida"
+                                : `IA · ${confiancaLabel(l.sugestao.confianca)}`}
                             </span>
                           )}
                           {l.sugestao && !l.sugestao.categoriaId && (

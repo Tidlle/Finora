@@ -11,6 +11,7 @@ import br.com.finora.api.dto.AnomaliasResumo;
 import br.com.finora.api.dto.InsightItem;
 import br.com.finora.api.dto.InsightsResponse;
 import br.com.finora.api.dto.InsightsResumo;
+import br.com.finora.api.dto.PreferenciaCategoriaDto;
 import br.com.finora.api.dto.ScoreComponente;
 import br.com.finora.api.dto.ScoreFinanceiroResponse;
 import br.com.finora.api.dto.ScoreIndicadores;
@@ -192,6 +193,7 @@ public class IntelligenceService {
     private final CategoriaService categoriaService;
     private final MetaService metaService;
     private final TransacaoRepository transacaoRepository;
+    private final PreferenciaCategoriaService preferenciaCategoriaService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final boolean pythonHabilitado;
     private final RestClient restClient;
@@ -253,11 +255,13 @@ public class IntelligenceService {
             CategoriaService categoriaService,
             MetaService metaService,
             TransacaoRepository transacaoRepository,
+            PreferenciaCategoriaService preferenciaCategoriaService,
             @Value("${finora.intelligence.url:}") String intelligenceUrl
     ) {
         this.transacaoRepository = transacaoRepository;
         this.categoriaService = categoriaService;
         this.metaService = metaService;
+        this.preferenciaCategoriaService = preferenciaCategoriaService;
         this.pythonHabilitado = intelligenceUrl != null && !intelligenceUrl.isBlank();
 
         if (this.pythonHabilitado) {
@@ -298,6 +302,7 @@ public class IntelligenceService {
                     cat.put("nome", c.nome());
                     cat.put("tipo", c.tipo().name());
                 }
+                adicionarPreferenciasAoPayload(payload, usuarioId, request.tipo());
                 byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
                 String json = restClient.post()
                         .uri("/sugerir-categoria")
@@ -342,6 +347,8 @@ public class IntelligenceService {
                     cat.put("nome", c.nome());
                     cat.put("tipo", c.tipo().name());
                 }
+                // Inclui todas as preferências do usuário (sem filtrar por tipo — Python filtra)
+                adicionarPreferenciasAoPayload(payload, usuarioId, null);
                 byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
                 String json = restClient.post()
                         .uri("/sugerir-categorias-lote")
@@ -1047,6 +1054,26 @@ public class IntelligenceService {
         }
 
         return new InsightsResponse(items, resumo);
+    }
+
+    // ── Preferências do usuário no payload Python ─────────────────────────────
+
+    private void adicionarPreferenciasAoPayload(ObjectNode payload, Long usuarioId, TipoTransacao tipo) {
+        try {
+            List<PreferenciaCategoriaDto> prefs = preferenciaCategoriaService.listarParaPython(usuarioId, tipo);
+            ArrayNode prefsArr = payload.putArray("preferenciasUsuario");
+            for (PreferenciaCategoriaDto p : prefs) {
+                ObjectNode pNode = prefsArr.addObject();
+                pNode.put("descricaoNormalizada", p.descricaoNormalizada());
+                pNode.put("categoriaId", p.categoriaId());
+                pNode.put("categoriaNome", p.categoriaNome());
+                pNode.put("tipo", p.tipo());
+                pNode.put("quantidadeUsos", p.quantidadeUsos());
+            }
+        } catch (Exception e) {
+            log.warn("Não foi possível incluir preferências do usuário no payload: {}", e.getMessage());
+            payload.putArray("preferenciasUsuario");
+        }
     }
 
     // ── Repositório de categorias ─────────────────────────────────────────────
