@@ -250,10 +250,11 @@ public class IntelligenceService {
                     cat.put("nome", c.nome());
                     cat.put("tipo", c.tipo().name());
                 }
+                byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
                 JsonNode resposta = restClient.post()
                         .uri("/sugerir-categoria")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(payload)
+                        .body(payloadBytes)
                         .retrieve()
                         .body(JsonNode.class);
                 return extrairSugestao(resposta);
@@ -293,10 +294,11 @@ public class IntelligenceService {
                     cat.put("nome", c.nome());
                     cat.put("tipo", c.tipo().name());
                 }
+                byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
                 JsonNode resposta = restClient.post()
                         .uri("/sugerir-categorias-lote")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .body(payload)
+                        .body(payloadBytes)
                         .retrieve()
                         .body(JsonNode.class);
                 return extrairLote(resposta);
@@ -501,10 +503,11 @@ public class IntelligenceService {
                 node.put("data", t.getDataTransacao().toString());
             }
 
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
             JsonNode resposta = restClient.post()
                     .uri("/gerar-insights")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(payload)
+                    .body(payloadBytes)
                     .retrieve()
                     .body(JsonNode.class);
 
@@ -559,10 +562,11 @@ public class IntelligenceService {
                 node.put("data", t.getDataTransacao().toString());
             }
 
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
             JsonNode resposta = restClient.post()
                     .uri("/detectar-anomalias")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(payload)
+                    .body(payloadBytes)
                     .retrieve()
                     .body(JsonNode.class);
 
