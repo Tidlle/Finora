@@ -258,7 +258,7 @@ public class IntelligenceService {
                         .retrieve()
                         .body(JsonNode.class);
                 return extrairSugestao(resposta);
-            } catch (RestClientException e) {
+            } catch (Exception e) {
                 log.warn("Python indisponível, usando classificador local: {}", e.getMessage());
             }
         }
@@ -302,7 +302,7 @@ public class IntelligenceService {
                         .retrieve()
                         .body(JsonNode.class);
                 return extrairLote(resposta);
-            } catch (RestClientException e) {
+            } catch (Exception e) {
                 log.warn("Python indisponível, usando classificador local: {}", e.getMessage());
             }
         }
