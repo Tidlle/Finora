@@ -8,6 +8,7 @@ from services.economias import sugerir_economias
 from services.score import calcular_score_financeiro
 from services.normalizer import normalizar_extrato
 from services.relatorio import gerar_relatorio_mensal
+from services.assistente import responder_assistente
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -644,6 +645,115 @@ def relatorio_mensal(request: RelatorioMensalRequest):
         indicadores=IndicadoresRelatorio(**resultado["indicadores"]),
         conclusao=resultado["conclusao"],
     )
+
+
+# ── Schemas de assistente financeiro ─────────────────────────────────────────
+
+class PeriodoAssistente(BaseModel):
+    mes: str = ""
+    dataInicial: str = ""
+    dataFinal: str = ""
+
+
+class ResumoFinanceiroAssistente(BaseModel):
+    totalReceitas: float = 0.0
+    totalDespesas: float = 0.0
+    saldo: float = 0.0
+
+
+class CategoriaAssistente(BaseModel):
+    nome: str = ""
+    tipo: str = ""
+    total: float = 0.0
+    percentual: float = 0.0
+
+
+class TransacaoAssistente(BaseModel):
+    descricao: str = ""
+    valor: float = 0.0
+    tipo: str = ""
+    categoria: str | None = None
+    data: str | None = None
+
+
+class MetaAssistente(BaseModel):
+    nome: str = ""
+    valorAlvo: float = 0.0
+    valorAtual: float = 0.0
+    status: str = ""
+
+
+class ScoreAssistente(BaseModel):
+    score: int = 0
+    classificacao: str = ""
+    mensagemPrincipal: str = ""
+
+
+class InsightAssistente(BaseModel):
+    tipo: str = ""
+    titulo: str = ""
+    mensagem: str = ""
+    prioridade: str = ""
+
+
+class AnomaliaAssistente(BaseModel):
+    tipo: str = ""
+    categoria: str | None = None
+    mensagem: str = ""
+    severidade: str = ""
+
+
+class ProjecaoAssistente(BaseModel):
+    tendencia: str = ""
+    riscoSaldoNegativo: bool = False
+    economiaMediaMensal: float = 0.0
+    mensagemPrincipal: str = ""
+
+
+class RecomendacaoAssistente(BaseModel):
+    economiaTotalPotencial: float = 0.0
+    categoriaComMaiorPotencial: str | None = None
+    mensagemPrincipal: str = ""
+
+
+class AssistenteRequest(BaseModel):
+    pergunta: str
+    periodo: PeriodoAssistente = PeriodoAssistente()
+    resumoFinanceiro: ResumoFinanceiroAssistente = ResumoFinanceiroAssistente()
+    categorias: list[CategoriaAssistente] = []
+    transacoes: list[TransacaoAssistente] = []
+    metas: list[MetaAssistente] = []
+    scoreFinanceiro: ScoreAssistente | None = None
+    insights: list[InsightAssistente] = []
+    anomalias: list[AnomaliaAssistente] = []
+    projecao: ProjecaoAssistente | None = None
+    recomendacoesEconomia: RecomendacaoAssistente | None = None
+
+
+class AssistenteResponse(BaseModel):
+    resposta: str
+    tipoResposta: str
+    confianca: float
+    dadosRelacionados: dict = {}
+    sugestoesPerguntas: list[str] = []
+
+
+@app.post("/assistente-financeiro", response_model=AssistenteResponse)
+def assistente_financeiro(request: AssistenteRequest):
+    resultado = responder_assistente(
+        pergunta=request.pergunta,
+        periodo=request.periodo.model_dump(),
+        resumo_financeiro=request.resumoFinanceiro.model_dump(),
+        categorias=[c.model_dump() for c in request.categorias],
+        transacoes=[t.model_dump() for t in request.transacoes],
+        metas=[m.model_dump() for m in request.metas],
+        score_financeiro=request.scoreFinanceiro.model_dump() if request.scoreFinanceiro else None,
+        insights=[i.model_dump() for i in request.insights],
+        anomalias=[a.model_dump() for a in request.anomalias],
+        projecao=request.projecao.model_dump() if request.projecao else None,
+        recomendacoes_economia=request.recomendacoesEconomia.model_dump() if request.recomendacoesEconomia else None,
+    )
+    return AssistenteResponse(**resultado)
 
 
 @app.post("/gerar-insights", response_model=InsightsResponse)

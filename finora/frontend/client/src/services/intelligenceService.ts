@@ -369,6 +369,32 @@ export async function normalizarExtrato(
   });
 }
 
+// ── Assistente financeiro ─────────────────────────────────────────────────────
+
+export type AssistenteRequest = {
+  pergunta: string;
+  mes?: string;
+};
+
+export type AssistenteResponse = {
+  resposta: string;
+  tipoResposta: string;
+  confianca: number;
+  dadosRelacionados: Record<string, unknown>;
+  sugestoesPerguntas: string[];
+};
+
+export async function enviarPerguntaAssistente(
+  req: AssistenteRequest
+): Promise<AssistenteResponse> {
+  const token = obterToken();
+  return apiRequest<AssistenteResponse>("/intelligence/assistente", {
+    method: "POST",
+    body: req,
+    token,
+  });
+}
+
 export async function buscarInsights(params: {
   mes?: string;
   dataInicial?: string;

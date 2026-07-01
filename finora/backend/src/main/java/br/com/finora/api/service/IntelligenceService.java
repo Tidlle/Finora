@@ -2,6 +2,8 @@ package br.com.finora.api.service;
 
 import br.com.finora.api.dto.IntelligenceCategoriaDto;
 import br.com.finora.api.dto.IntelligenceLoteResponse;
+import br.com.finora.api.dto.AssistenteRequest;
+import br.com.finora.api.dto.AssistenteResponse;
 import br.com.finora.api.dto.NormalizarExtratoRequest;
 import br.com.finora.api.dto.NormalizarExtratoResponse;
 import br.com.finora.api.dto.ResumoNormalizacaoDto;
@@ -1392,6 +1394,133 @@ public class IntelligenceService {
         return new NormalizarExtratoResponse(
                 normalizadas,
                 new ResumoNormalizacaoDto(brutas.size(), 0, brutas.size(), 0, brutas.size(), 0)
+        );
+    }
+
+    // ── Assistente financeiro ─────────────────────────────────────────────────
+
+    private static final AssistenteResponse ASSISTENTE_FALLBACK = new AssistenteResponse(
+            "O assistente está temporariamente indisponível. Tente novamente em instantes.",
+            "ERRO", 0.0, Map.of(),
+            List.of("Qual foi meu saldo este mês?", "Onde gastei mais?", "Como posso economizar?")
+    );
+
+    @Transactional
+    public AssistenteResponse responderAssistente(Long usuarioId, AssistenteRequest request) {
+        if (!pythonHabilitado) return ASSISTENTE_FALLBACK;
+
+        try {
+            YearMonth ym = (request.mes() != null && !request.mes().isBlank())
+                    ? YearMonth.parse(request.mes())
+                    : YearMonth.now();
+
+            LocalDate ini = ym.atDay(1);
+            LocalDate fim = ym.atEndOfMonth();
+
+            List<Transacao> txAtual = transacaoRepository.buscarPorPeriodo(usuarioId, ini, fim.plusDays(1));
+
+            double totalReceitas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.RECEITA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+            double totalDespesas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.DESPESA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+
+            Map<String, Double> porCategoria = new java.util.LinkedHashMap<>();
+            for (Transacao t : txAtual) {
+                if (t.getTipo() == TipoTransacao.DESPESA) {
+                    String cat = t.getCategoria().getNome();
+                    porCategoria.merge(cat, t.getValor().doubleValue(), Double::sum);
+                }
+            }
+
+            var metas = metaService.listar(usuarioId, null);
+
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("pergunta", request.pergunta() != null ? request.pergunta() : "");
+
+            ObjectNode periodo = payload.putObject("periodo");
+            periodo.put("mes", ym.toString());
+            periodo.put("dataInicial", ini.toString());
+            periodo.put("dataFinal", fim.toString());
+
+            ObjectNode resumo = payload.putObject("resumoFinanceiro");
+            resumo.put("totalReceitas", totalReceitas);
+            resumo.put("totalDespesas", totalDespesas);
+            resumo.put("saldo", totalReceitas - totalDespesas);
+
+            ArrayNode catsArr = payload.putArray("categorias");
+            for (Map.Entry<String, Double> entry : porCategoria.entrySet()) {
+                ObjectNode c = catsArr.addObject();
+                c.put("nome", entry.getKey());
+                c.put("tipo", "DESPESA");
+                c.put("total", entry.getValue());
+                c.put("percentual", totalDespesas > 0 ? entry.getValue() / totalDespesas * 100 : 0);
+            }
+
+            ArrayNode txArr = payload.putArray("transacoes");
+            for (Transacao t : txAtual) {
+                ObjectNode node = txArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            ArrayNode metasArr = payload.putArray("metas");
+            for (var m : metas) {
+                ObjectNode node = metasArr.addObject();
+                node.put("nome", m.nome());
+                node.put("valorAlvo", m.valorObjetivo().doubleValue());
+                node.put("valorAtual", m.valorAcumulado().doubleValue());
+                node.put("status", m.status().name());
+            }
+
+            payload.putArray("insights");
+            payload.putArray("anomalias");
+            payload.putNull("scoreFinanceiro");
+            payload.putNull("projecao");
+            payload.putNull("recomendacoesEconomia");
+
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+            String json = restClient.post()
+                    .uri("/assistente-financeiro")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payloadBytes)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseAssistente(objectMapper.readTree(json));
+
+        } catch (Exception e) {
+            log.warn("Erro ao chamar assistente financeiro via Python: {}", e.getMessage());
+            return ASSISTENTE_FALLBACK;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private AssistenteResponse parseAssistente(JsonNode node) {
+        if (node == null) return ASSISTENTE_FALLBACK;
+
+        List<String> sugestoes = new ArrayList<>();
+        JsonNode sugArr = node.path("sugestoesPerguntas");
+        if (sugArr.isArray()) sugArr.forEach(s -> sugestoes.add(s.asText()));
+
+        Map<String, Object> dados = Map.of();
+        JsonNode dadosNode = node.path("dadosRelacionados");
+        if (!dadosNode.isMissingNode() && !dadosNode.isNull()) {
+            try {
+                dados = objectMapper.convertValue(dadosNode, Map.class);
+            } catch (Exception ignored) {}
+        }
+
+        return new AssistenteResponse(
+                node.path("resposta").asText(""),
+                node.path("tipoResposta").asText("AJUDA"),
+                node.path("confianca").asDouble(0.5),
+                dados,
+                sugestoes
         );
     }
 

@@ -1,5 +1,7 @@
 package br.com.finora.api.controller;
 
+import br.com.finora.api.dto.AssistenteRequest;
+import br.com.finora.api.dto.AssistenteResponse;
 import br.com.finora.api.dto.AnomaliasResponse;
 import br.com.finora.api.dto.NormalizarExtratoRequest;
 import br.com.finora.api.dto.NormalizarExtratoResponse;
@@ -173,6 +175,15 @@ public class IntelligenceController {
     ) {
         Long usuarioId = Long.valueOf(jwt.getSubject());
         return ResponseEntity.ok(intelligenceService.normalizarExtrato(usuarioId, request));
+    }
+
+    @PostMapping("/assistente")
+    public ResponseEntity<AssistenteResponse> assistente(
+            @AuthenticationPrincipal Jwt jwt,
+            @Valid @RequestBody AssistenteRequest request
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+        return ResponseEntity.ok(intelligenceService.responderAssistente(usuarioId, request));
     }
 
     @GetMapping("/insights")
