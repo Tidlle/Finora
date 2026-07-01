@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { FinoraLogo } from "./FinoraLogo";
 import { Button } from "./ui/button";
-import { LayoutDashboard, Wallet, Tag, Target, User, TrendingUp, LogOut } from "lucide-react";
+import { LayoutDashboard, Wallet, Tag, Target, User, TrendingUp, LogOut, FileBarChart } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useFinora } from "@/contexts/FinoraContext";
 import { listarMetas } from "@/services/metaService";
@@ -13,6 +13,7 @@ const mainItems = [
   { label: "Categorias",  href: "/categories",   icon: Tag },
   { label: "Metas",       href: "/goals",        icon: Target },
   { label: "Projeções",   href: "/future",       icon: TrendingUp },
+  { label: "Relatório",   href: "/report",       icon: FileBarChart },
   { label: "Perfil",      href: "/profile",      icon: User },
 ];
 

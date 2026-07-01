@@ -7,6 +7,7 @@ from services.projecoes import projetar_financas
 from services.economias import sugerir_economias
 from services.score import calcular_score_financeiro
 from services.normalizer import normalizar_extrato
+from services.relatorio import gerar_relatorio_mensal
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -507,6 +508,141 @@ def normalizar(request: NormalizarExtratoRequest):
     return NormalizarExtratoResponse(
         transacoesNormalizadas=[TransacaoNormalizada(**t) for t in resultado["transacoesNormalizadas"]],
         resumo=ResumoNormalizacao(**resultado["resumo"]),
+    )
+
+
+# ── Schemas de relatório mensal ───────────────────────────────────────────────
+
+class PeriodoRelatorio(BaseModel):
+    mes: str = ""
+    dataInicial: str = ""
+    dataFinal: str = ""
+
+
+class ResumoFinanceiroRelatorio(BaseModel):
+    totalReceitas: float = 0.0
+    totalDespesas: float = 0.0
+    saldo: float = 0.0
+
+
+class CategoriaRelatorio(BaseModel):
+    nome: str = ""
+    tipo: str = ""
+    total: float = 0.0
+    percentual: float = 0.0
+
+
+class TransacaoRelatorio(BaseModel):
+    descricao: str = ""
+    valor: float = 0.0
+    tipo: str = ""
+    categoria: str | None = None
+    data: str | None = None
+
+
+class InsightRelatorio(BaseModel):
+    tipo: str = ""
+    titulo: str = ""
+    mensagem: str = ""
+    prioridade: str = ""
+
+
+class AnomaliaRelatorio(BaseModel):
+    tipo: str = ""
+    categoria: str | None = None
+    mensagem: str = ""
+    severidade: str = ""
+
+
+class ScoreRelatorio(BaseModel):
+    score: int = 0
+    classificacao: str = ""
+    mensagemPrincipal: str = ""
+
+
+class RecomendacoesRelatorio(BaseModel):
+    economiaTotalPotencial: float = 0.0
+    categoriaComMaiorPotencial: str | None = None
+    mensagemPrincipal: str = ""
+
+
+class ProjecaoRelatorio(BaseModel):
+    tendencia: str = ""
+    riscoSaldoNegativo: bool = False
+    economiaMediaMensal: float = 0.0
+    mensagemPrincipal: str = ""
+
+
+class MetaRelatorio(BaseModel):
+    nome: str = ""
+    valorAlvo: float = 0.0
+    valorAtual: float = 0.0
+    status: str = ""
+
+
+class RelatorioMensalRequest(BaseModel):
+    periodo: PeriodoRelatorio = PeriodoRelatorio()
+    periodoAnterior: PeriodoRelatorio | None = None
+    resumoFinanceiro: ResumoFinanceiroRelatorio = ResumoFinanceiroRelatorio()
+    categorias: list[CategoriaRelatorio] = []
+    transacoes: list[TransacaoRelatorio] = []
+    insights: list[InsightRelatorio] = []
+    anomalias: list[AnomaliaRelatorio] = []
+    scoreFinanceiro: ScoreRelatorio | None = None
+    recomendacoesEconomia: RecomendacoesRelatorio | None = None
+    projecao: ProjecaoRelatorio | None = None
+    metas: list[MetaRelatorio] = []
+
+
+class SecaoRelatorio(BaseModel):
+    titulo: str
+    tipo: str
+    itens: list[str]
+
+
+class IndicadoresRelatorio(BaseModel):
+    totalReceitas: float
+    totalDespesas: float
+    saldo: float
+    scoreFinanceiro: int
+    economiaPotencial: float
+    maiorCategoria: str | None
+    riscoSaldoNegativo: bool
+
+
+class RelatorioMensalResponse(BaseModel):
+    titulo: str
+    subtitulo: str
+    mensagemPrincipal: str
+    classificacaoGeral: str
+    secoes: list[SecaoRelatorio]
+    indicadores: IndicadoresRelatorio
+    conclusao: str
+
+
+@app.post("/gerar-relatorio-mensal", response_model=RelatorioMensalResponse)
+def relatorio_mensal(request: RelatorioMensalRequest):
+    resultado = gerar_relatorio_mensal(
+        periodo=request.periodo.model_dump(),
+        periodo_anterior=request.periodoAnterior.model_dump() if request.periodoAnterior else None,
+        resumo_financeiro=request.resumoFinanceiro.model_dump(),
+        categorias=[c.model_dump() for c in request.categorias],
+        transacoes=[t.model_dump() for t in request.transacoes],
+        insights=[i.model_dump() for i in request.insights],
+        anomalias=[a.model_dump() for a in request.anomalias],
+        score_financeiro=request.scoreFinanceiro.model_dump() if request.scoreFinanceiro else None,
+        recomendacoes_economia=request.recomendacoesEconomia.model_dump() if request.recomendacoesEconomia else None,
+        projecao=request.projecao.model_dump() if request.projecao else None,
+        metas=[m.model_dump() for m in request.metas],
+    )
+    return RelatorioMensalResponse(
+        titulo=resultado["titulo"],
+        subtitulo=resultado["subtitulo"],
+        mensagemPrincipal=resultado["mensagemPrincipal"],
+        classificacaoGeral=resultado["classificacaoGeral"],
+        secoes=[SecaoRelatorio(**s) for s in resultado["secoes"]],
+        indicadores=IndicadoresRelatorio(**resultado["indicadores"]),
+        conclusao=resultado["conclusao"],
     )
 
 

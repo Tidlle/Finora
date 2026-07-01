@@ -278,6 +278,42 @@ export async function registrarAprendizadoCategoria(
   });
 }
 
+// ── Relatório mensal ──────────────────────────────────────────────────────────
+
+export type SecaoRelatorio = {
+  titulo: string;
+  tipo: string;
+  itens: string[];
+};
+
+export type IndicadoresRelatorio = {
+  totalReceitas: number;
+  totalDespesas: number;
+  saldo: number;
+  scoreFinanceiro: number;
+  economiaPotencial: number;
+  maiorCategoria: string | null;
+  riscoSaldoNegativo: boolean;
+};
+
+export type RelatorioMensalResponse = {
+  titulo: string;
+  subtitulo: string;
+  mensagemPrincipal: string;
+  classificacaoGeral: string;
+  secoes: SecaoRelatorio[];
+  indicadores: IndicadoresRelatorio;
+  conclusao: string;
+};
+
+export async function buscarRelatorioMensal(mes: string): Promise<RelatorioMensalResponse> {
+  const token = obterToken();
+  return apiRequest<RelatorioMensalResponse>(`/intelligence/relatorio-mensal?mes=${mes}`, {
+    method: "GET",
+    token,
+  });
+}
+
 // ── Smart Import / Normalização de extrato ────────────────────────────────────
 
 export type TransacaoBruta = {

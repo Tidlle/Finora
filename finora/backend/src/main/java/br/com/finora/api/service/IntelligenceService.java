@@ -7,6 +7,9 @@ import br.com.finora.api.dto.NormalizarExtratoResponse;
 import br.com.finora.api.dto.ResumoNormalizacaoDto;
 import br.com.finora.api.dto.TransacaoBrutaDto;
 import br.com.finora.api.dto.TransacaoNormalizadaDto;
+import br.com.finora.api.dto.RelatorioMensalResponse;
+import br.com.finora.api.dto.SecaoRelatorioDto;
+import br.com.finora.api.dto.IndicadoresRelatorioDto;
 import br.com.finora.api.dto.IntelligenceSugestaoLoteItem;
 import br.com.finora.api.dto.IntelligenceSugestaoRequest;
 import br.com.finora.api.dto.IntelligenceSugestaoResponse;
@@ -1079,6 +1082,173 @@ public class IntelligenceService {
             log.warn("Não foi possível incluir preferências do usuário no payload: {}", e.getMessage());
             payload.putArray("preferenciasUsuario");
         }
+    }
+
+    // ── Relatório mensal ──────────────────────────────────────────────────────
+
+    private static final RelatorioMensalResponse RELATORIO_FALLBACK = new RelatorioMensalResponse(
+            "Relatório financeiro indisponível",
+            "Não foi possível gerar o relatório inteligente neste momento.",
+            "Tente novamente mais tarde.",
+            "INFORMATIVO",
+            List.of(new SecaoRelatorioDto(
+                    "Serviço indisponível", "RESUMO",
+                    List.of("O Finora Intelligence não conseguiu gerar o relatório agora.")
+            )),
+            new IndicadoresRelatorioDto(0, 0, 0, 0, 0, null, false),
+            "Tente novamente em alguns instantes."
+    );
+
+    @Transactional
+    public RelatorioMensalResponse gerarRelatorioMensal(Long usuarioId, YearMonth ym) {
+        if (!pythonHabilitado) return RELATORIO_FALLBACK;
+
+        try {
+            LocalDate ini = ym.atDay(1);
+            LocalDate fim = ym.atEndOfMonth();
+            LocalDate iniAnt = ini.minusMonths(1).withDayOfMonth(1);
+            LocalDate fimAnt = ini.minusDays(1);
+
+            List<Transacao> txAtual = transacaoRepository.buscarPorPeriodo(usuarioId, ini, fim.plusDays(1));
+            List<Transacao> txAnterior = transacaoRepository.buscarPorPeriodo(usuarioId, iniAnt, ini);
+
+            double totalReceitas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.RECEITA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+            double totalDespesas = txAtual.stream()
+                    .filter(t -> t.getTipo() == TipoTransacao.DESPESA)
+                    .mapToDouble(t -> t.getValor().doubleValue()).sum();
+
+            // Agrega despesas por categoria
+            Map<String, Double> porCategoria = new java.util.LinkedHashMap<>();
+            for (Transacao t : txAtual) {
+                if (t.getTipo() == TipoTransacao.DESPESA) {
+                    String cat = t.getCategoria().getNome();
+                    porCategoria.merge(cat, t.getValor().doubleValue(), Double::sum);
+                }
+            }
+
+            var metas = metaService.listar(usuarioId, null);
+
+            ObjectNode payload = objectMapper.createObjectNode();
+
+            // periodo
+            ObjectNode periodo = payload.putObject("periodo");
+            periodo.put("mes", ym.toString());
+            periodo.put("dataInicial", ini.toString());
+            periodo.put("dataFinal", fim.toString());
+
+            ObjectNode periodoAnt = payload.putObject("periodoAnterior");
+            periodoAnt.put("mes", ym.minusMonths(1).toString());
+            periodoAnt.put("dataInicial", iniAnt.toString());
+            periodoAnt.put("dataFinal", fimAnt.toString());
+
+            // resumoFinanceiro
+            ObjectNode resumo = payload.putObject("resumoFinanceiro");
+            resumo.put("totalReceitas", totalReceitas);
+            resumo.put("totalDespesas", totalDespesas);
+            resumo.put("saldo", totalReceitas - totalDespesas);
+
+            // categorias com percentual
+            ArrayNode catsArr = payload.putArray("categorias");
+            for (Map.Entry<String, Double> entry : porCategoria.entrySet()) {
+                ObjectNode c = catsArr.addObject();
+                c.put("nome", entry.getKey());
+                c.put("tipo", "DESPESA");
+                c.put("total", entry.getValue());
+                c.put("percentual", totalDespesas > 0 ? entry.getValue() / totalDespesas * 100 : 0);
+            }
+
+            // transacoes
+            ArrayNode txArr = payload.putArray("transacoes");
+            for (Transacao t : txAtual) {
+                ObjectNode node = txArr.addObject();
+                node.put("descricao", t.getDescricao());
+                node.put("valor", t.getValor().doubleValue());
+                node.put("tipo", t.getTipo().name());
+                node.put("categoria", t.getCategoria().getNome());
+                node.put("data", t.getDataTransacao().toString());
+            }
+
+            // insights (reutiliza lógica existente via Python)
+            payload.putArray("insights");
+
+            // anomalias (array vazio — Python tolera)
+            payload.putArray("anomalias");
+
+            // scoreFinanceiro
+            payload.putNull("scoreFinanceiro");
+
+            // recomendacoesEconomia
+            payload.putNull("recomendacoesEconomia");
+
+            // projecao (array vazio)
+            payload.putNull("projecao");
+
+            // metas
+            ArrayNode metasArr = payload.putArray("metas");
+            for (var m : metas) {
+                ObjectNode node = metasArr.addObject();
+                node.put("nome", m.nome());
+                node.put("valorAlvo", m.valorObjetivo().doubleValue());
+                node.put("valorAtual", m.valorAcumulado().doubleValue());
+                node.put("status", m.status().name());
+            }
+
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+            String json = restClient.post()
+                    .uri("/gerar-relatorio-mensal")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payloadBytes)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseRelatorio(objectMapper.readTree(json));
+
+        } catch (Exception e) {
+            log.warn("Erro ao gerar relatório mensal via Python: {}", e.getMessage());
+            return RELATORIO_FALLBACK;
+        }
+    }
+
+    private RelatorioMensalResponse parseRelatorio(JsonNode node) {
+        if (node == null) return RELATORIO_FALLBACK;
+
+        List<SecaoRelatorioDto> secoes = new ArrayList<>();
+        JsonNode secoesArr = node.path("secoes");
+        if (secoesArr.isArray()) {
+            for (JsonNode s : secoesArr) {
+                List<String> itens = new ArrayList<>();
+                JsonNode itensArr = s.path("itens");
+                if (itensArr.isArray()) itensArr.forEach(i -> itens.add(i.asText()));
+                secoes.add(new SecaoRelatorioDto(
+                        s.path("titulo").asText(""),
+                        s.path("tipo").asText(""),
+                        itens
+                ));
+            }
+        }
+
+        JsonNode ind = node.path("indicadores");
+        IndicadoresRelatorioDto indicadores = new IndicadoresRelatorioDto(
+                ind.path("totalReceitas").asDouble(0),
+                ind.path("totalDespesas").asDouble(0),
+                ind.path("saldo").asDouble(0),
+                ind.path("scoreFinanceiro").asInt(0),
+                ind.path("economiaPotencial").asDouble(0),
+                ind.hasNonNull("maiorCategoria") ? ind.get("maiorCategoria").asText() : null,
+                ind.path("riscoSaldoNegativo").asBoolean(false)
+        );
+
+        return new RelatorioMensalResponse(
+                node.path("titulo").asText("Relatório mensal"),
+                node.path("subtitulo").asText(""),
+                node.path("mensagemPrincipal").asText(""),
+                node.path("classificacaoGeral").asText("INFORMATIVO"),
+                secoes,
+                indicadores,
+                node.path("conclusao").asText("")
+        );
     }
 
     // ── Normalização de extrato ───────────────────────────────────────────────

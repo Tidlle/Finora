@@ -3,6 +3,7 @@ package br.com.finora.api.controller;
 import br.com.finora.api.dto.AnomaliasResponse;
 import br.com.finora.api.dto.NormalizarExtratoRequest;
 import br.com.finora.api.dto.NormalizarExtratoResponse;
+import br.com.finora.api.dto.RelatorioMensalResponse;
 import br.com.finora.api.dto.AprendizadoCategoriaRequest;
 import br.com.finora.api.dto.AprendizadoCategoriaResponse;
 import br.com.finora.api.dto.IntelligenceLoteRequest;
@@ -153,6 +154,16 @@ public class IntelligenceController {
                 : YearMonth.now();
         return ResponseEntity.ok(intelligenceService.gerarRecomendacoesEconomia(
                 usuarioId, ym.atDay(1), ym.atEndOfMonth()));
+    }
+
+    @GetMapping("/relatorio-mensal")
+    public ResponseEntity<RelatorioMensalResponse> relatorioMensal(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(required = false) String mes
+    ) {
+        Long usuarioId = Long.valueOf(jwt.getSubject());
+        YearMonth ym = (mes != null && !mes.isBlank()) ? YearMonth.parse(mes) : YearMonth.now();
+        return ResponseEntity.ok(intelligenceService.gerarRelatorioMensal(usuarioId, ym));
     }
 
     @PostMapping("/normalizar-extrato")
