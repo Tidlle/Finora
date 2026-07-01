@@ -369,6 +369,67 @@ export async function normalizarExtrato(
   });
 }
 
+// ── Simulador financeiro ──────────────────────────────────────────────────────
+
+export type TipoSimulacao = "META" | "REDUCAO_DESPESAS" | "AUMENTO_RECEITA" | "CENARIO_COMBINADO";
+
+export type SimuladorParametros = {
+  valorMeta?: number;
+  valorAtual?: number;
+  economiaMensalPlanejada?: number;
+  prazoDesejadoMeses?: number;
+  categoria?: string;
+  percentualReducaoDespesa?: number;
+  categoriasReducao?: string[];
+  aumentoReceitaMensal?: number;
+};
+
+export type SimuladorRequest = {
+  tipoSimulacao: TipoSimulacao;
+  mesesProjecao: number;
+  parametros: SimuladorParametros;
+};
+
+export type SimuladorProjecaoItem = {
+  mes: string;
+  receitasProjetadas: number | null;
+  despesasProjetadas: number | null;
+  saldoProjetado: number;
+  valorAcumuladoMeta: number | null;
+};
+
+export type SimuladorCenario = {
+  nome: string;
+  descricao: string;
+  valorMensal: number | null;
+  mesesParaAtingir: number | null;
+  saldoFinalProjetado: number | null;
+  economiaMensal: number | null;
+  percentualReducao: number | null;
+};
+
+export type SimuladorResponse = {
+  tipoSimulacao: string;
+  titulo: string;
+  mensagemPrincipal: string;
+  resultado: Record<string, unknown>;
+  projecaoMensal: SimuladorProjecaoItem[];
+  cenariosComparativos: SimuladorCenario[];
+  alertas: string[];
+  recomendacoes: string[];
+};
+
+export async function simularCenarioFinanceiro(
+  payload: SimuladorRequest
+): Promise<SimuladorResponse> {
+  const token = obterToken();
+  return apiRequest<SimuladorResponse>("/intelligence/simulador", {
+    method: "POST",
+    body: payload,
+    token,
+  });
+}
+
 // ── Assistente financeiro ─────────────────────────────────────────────────────
 
 export type AssistenteRequest = {

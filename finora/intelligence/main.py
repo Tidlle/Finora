@@ -9,6 +9,7 @@ from services.score import calcular_score_financeiro
 from services.normalizer import normalizar_extrato
 from services.relatorio import gerar_relatorio_mensal
 from services.assistente import responder_assistente
+from services.simulador import simular_cenario_financeiro
 
 app = FastAPI(title="Finora Intelligence", version="1.0.0")
 
@@ -644,6 +645,112 @@ def relatorio_mensal(request: RelatorioMensalRequest):
         secoes=[SecaoRelatorio(**s) for s in resultado["secoes"]],
         indicadores=IndicadoresRelatorio(**resultado["indicadores"]),
         conclusao=resultado["conclusao"],
+    )
+
+
+# ── Schemas de simulador financeiro ──────────────────────────────────────────
+
+class SimuladorParametros(BaseModel):
+    valorMeta: float | None = None
+    valorAtual: float | None = None
+    economiaMensalPlanejada: float | None = None
+    prazoDesejadoMeses: int | None = None
+    categoria: str | None = None
+    percentualReducaoDespesa: float | None = None
+    categoriasReducao: list[str] = []
+    aumentoReceitaMensal: float | None = None
+
+
+class ContextoFinanceiro(BaseModel):
+    saldoAtual: float = 0.0
+    mediaReceitasMensais: float | None = None
+    mediaDespesasMensais: float | None = None
+    economiaMediaMensal: float | None = None
+    scoreFinanceiro: int | None = None
+    classificacaoScore: str | None = None
+    riscoSaldoNegativo: bool = False
+
+
+class CategoriaSimulador(BaseModel):
+    nome: str = ""
+    tipo: str = ""
+    totalMedioMensal: float = 0.0
+    percentualDespesas: float = 0.0
+
+
+class MetaSimulador(BaseModel):
+    nome: str = ""
+    valorAlvo: float = 0.0
+    valorAtual: float = 0.0
+    status: str = ""
+
+
+class HistoricoMensal(BaseModel):
+    mes: str = ""
+    receitas: float = 0.0
+    despesas: float = 0.0
+    saldo: float = 0.0
+
+
+class SimuladorRequest(BaseModel):
+    tipoSimulacao: str
+    mesesProjecao: int = 6
+    parametros: SimuladorParametros = SimuladorParametros()
+    contextoFinanceiro: ContextoFinanceiro = ContextoFinanceiro()
+    categorias: list[CategoriaSimulador] = []
+    metas: list[MetaSimulador] = []
+    historicoMensal: list[HistoricoMensal] = []
+
+
+class ProjecaoItem(BaseModel):
+    mes: str
+    receitasProjetadas: float | None = None
+    despesasProjetadas: float | None = None
+    saldoProjetado: float
+    valorAcumuladoMeta: float | None = None
+
+
+class CenarioComparativo(BaseModel):
+    nome: str
+    descricao: str
+    valorMensal: float | None = None
+    mesesParaAtingir: int | None = None
+    saldoFinalProjetado: float | None = None
+    economiaMensal: float | None = None
+    percentualReducao: float | None = None
+
+
+class SimuladorResponse(BaseModel):
+    tipoSimulacao: str
+    titulo: str
+    mensagemPrincipal: str
+    resultado: dict = {}
+    projecaoMensal: list[ProjecaoItem] = []
+    cenariosComparativos: list[CenarioComparativo] = []
+    alertas: list[str] = []
+    recomendacoes: list[str] = []
+
+
+@app.post("/simular-cenario-financeiro", response_model=SimuladorResponse)
+def simular_cenario(request: SimuladorRequest):
+    resultado = simular_cenario_financeiro(
+        tipo_simulacao=request.tipoSimulacao,
+        meses_projecao=request.mesesProjecao,
+        parametros=request.parametros.model_dump(),
+        contexto_financeiro=request.contextoFinanceiro.model_dump(),
+        categorias=[c.model_dump() for c in request.categorias],
+        metas=[m.model_dump() for m in request.metas],
+        historico_mensal=[h.model_dump() for h in request.historicoMensal],
+    )
+    return SimuladorResponse(
+        tipoSimulacao=resultado["tipoSimulacao"],
+        titulo=resultado["titulo"],
+        mensagemPrincipal=resultado["mensagemPrincipal"],
+        resultado=resultado.get("resultado") or {},
+        projecaoMensal=[ProjecaoItem(**p) for p in resultado.get("projecaoMensal") or []],
+        cenariosComparativos=[CenarioComparativo(**c) for c in resultado.get("cenariosComparativos") or []],
+        alertas=resultado.get("alertas") or [],
+        recomendacoes=resultado.get("recomendacoes") or [],
     )
 
 

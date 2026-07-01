@@ -3,6 +3,10 @@ package br.com.finora.api.service;
 import br.com.finora.api.dto.IntelligenceCategoriaDto;
 import br.com.finora.api.dto.IntelligenceLoteResponse;
 import br.com.finora.api.dto.AssistenteRequest;
+import br.com.finora.api.dto.SimuladorRequest;
+import br.com.finora.api.dto.SimuladorResponse;
+import br.com.finora.api.dto.SimuladorProjecaoItem;
+import br.com.finora.api.dto.SimuladorCenario;
 import br.com.finora.api.dto.AssistenteResponse;
 import br.com.finora.api.dto.NormalizarExtratoRequest;
 import br.com.finora.api.dto.NormalizarExtratoResponse;
@@ -1394,6 +1398,211 @@ public class IntelligenceService {
         return new NormalizarExtratoResponse(
                 normalizadas,
                 new ResumoNormalizacaoDto(brutas.size(), 0, brutas.size(), 0, brutas.size(), 0)
+        );
+    }
+
+    // ── Simulador financeiro ──────────────────────────────────────────────────
+
+    private static final SimuladorResponse SIMULADOR_FALLBACK = new SimuladorResponse(
+            "INFORMATIVO",
+            "Simulador indisponível",
+            "Não foi possível gerar a simulação inteligente neste momento.",
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of("Tente novamente em alguns instantes."),
+            List.of()
+    );
+
+    @Transactional
+    public SimuladorResponse simularCenario(Long usuarioId, SimuladorRequest request) {
+        if (!pythonHabilitado) return SIMULADOR_FALLBACK;
+
+        try {
+            // Histórico dos últimos 6 meses
+            LocalDate hoje = LocalDate.now();
+            LocalDate iniHistorico = hoje.minusMonths(6).withDayOfMonth(1);
+            List<Transacao> txHistorico = transacaoRepository.buscarPorPeriodo(
+                    usuarioId, iniHistorico, hoje.plusDays(1));
+
+            // Calcular médias mensais por mês
+            Map<String, double[]> porMes = new java.util.TreeMap<>();
+            for (Transacao t : txHistorico) {
+                String mesKey = t.getDataTransacao().getYear() + "-"
+                        + String.format("%02d", t.getDataTransacao().getMonthValue());
+                porMes.computeIfAbsent(mesKey, k -> new double[]{0, 0});
+                if (t.getTipo() == TipoTransacao.RECEITA) {
+                    porMes.get(mesKey)[0] += t.getValor().doubleValue();
+                } else {
+                    porMes.get(mesKey)[1] += t.getValor().doubleValue();
+                }
+            }
+
+            double somaReceitas = 0, somaDespesas = 0;
+            int mesesComDados = porMes.size();
+            for (double[] v : porMes.values()) { somaReceitas += v[0]; somaDespesas += v[1]; }
+            double mediaReceitas = mesesComDados > 0 ? somaReceitas / mesesComDados : 0;
+            double mediaDespesas = mesesComDados > 0 ? somaDespesas / mesesComDados : 0;
+            double economiaMedia = Math.max(0, mediaReceitas - mediaDespesas);
+
+            // Saldo atual (todas as transações)
+            List<Transacao> todasTx = transacaoRepository.findAllByUsuario_IdOrderByDataTransacaoDescIdDesc(usuarioId);
+            double saldoAtual = todasTx.stream().mapToDouble(t -> {
+                double v = t.getValor().doubleValue();
+                return t.getTipo() == TipoTransacao.RECEITA ? v : -v;
+            }).sum();
+
+            // Metas
+            var metas = metaService.listar(usuarioId, null);
+
+            // Categorias: média mensal por categoria
+            Map<String, double[]> porCategoria = new java.util.LinkedHashMap<>();
+            for (Transacao t : txHistorico) {
+                if (t.getTipo() == TipoTransacao.DESPESA) {
+                    String cat = t.getCategoria().getNome();
+                    porCategoria.computeIfAbsent(cat, k -> new double[]{0});
+                    porCategoria.get(cat)[0] += t.getValor().doubleValue();
+                }
+            }
+
+            // Montar payload
+            ObjectNode payload = objectMapper.createObjectNode();
+
+            String tipo = request.tipoSimulacao() != null ? request.tipoSimulacao() : "META";
+            payload.put("tipoSimulacao", tipo);
+            payload.put("mesesProjecao", request.mesesProjecao() != null ? request.mesesProjecao() : 6);
+
+            // parametros — mescla do request com valores da request
+            ObjectNode params = payload.putObject("parametros");
+            if (request.parametros() != null) {
+                var p = request.parametros();
+                if (p.valorMeta() != null) params.put("valorMeta", p.valorMeta());
+                if (p.valorAtual() != null) params.put("valorAtual", p.valorAtual());
+                if (p.economiaMensalPlanejada() != null) params.put("economiaMensalPlanejada", p.economiaMensalPlanejada());
+                if (p.prazoDesejadoMeses() != null) params.put("prazoDesejadoMeses", p.prazoDesejadoMeses());
+                if (p.categoria() != null) params.put("categoria", p.categoria());
+                if (p.percentualReducaoDespesa() != null) params.put("percentualReducaoDespesa", p.percentualReducaoDespesa());
+                if (p.aumentoReceitaMensal() != null) params.put("aumentoReceitaMensal", p.aumentoReceitaMensal());
+                ArrayNode catsReducao = params.putArray("categoriasReducao");
+                if (p.categoriasReducao() != null) p.categoriasReducao().forEach(catsReducao::add);
+            }
+
+            // contextoFinanceiro com dados reais
+            ObjectNode ctx = payload.putObject("contextoFinanceiro");
+            ctx.put("saldoAtual", saldoAtual);
+            ctx.put("mediaReceitasMensais", mediaReceitas);
+            ctx.put("mediaDespesasMensais", mediaDespesas);
+            ctx.put("economiaMediaMensal", economiaMedia);
+            ctx.putNull("scoreFinanceiro");
+            ctx.putNull("classificacaoScore");
+            ctx.put("riscoSaldoNegativo", false);
+
+            // categorias com médias mensais
+            ArrayNode catsArr = payload.putArray("categorias");
+            for (Map.Entry<String, double[]> e : porCategoria.entrySet()) {
+                ObjectNode c = catsArr.addObject();
+                c.put("nome", e.getKey());
+                c.put("tipo", "DESPESA");
+                double totalMedio = mesesComDados > 0 ? e.getValue()[0] / mesesComDados : 0;
+                c.put("totalMedioMensal", totalMedio);
+                c.put("percentualDespesas", mediaDespesas > 0 ? totalMedio / mediaDespesas * 100 : 0);
+            }
+
+            // metas
+            ArrayNode metasArr = payload.putArray("metas");
+            for (var m : metas) {
+                ObjectNode node = metasArr.addObject();
+                node.put("nome", m.nome());
+                node.put("valorAlvo", m.valorObjetivo().doubleValue());
+                node.put("valorAtual", m.valorAcumulado().doubleValue());
+                node.put("status", m.status().name());
+            }
+
+            // histórico mensal
+            ArrayNode histArr = payload.putArray("historicoMensal");
+            for (Map.Entry<String, double[]> e : porMes.entrySet()) {
+                ObjectNode node = histArr.addObject();
+                node.put("mes", e.getKey());
+                node.put("receitas", e.getValue()[0]);
+                node.put("despesas", e.getValue()[1]);
+                node.put("saldo", e.getValue()[0] - e.getValue()[1]);
+            }
+
+            byte[] payloadBytes = objectMapper.writeValueAsBytes(payload);
+            String json = restClient.post()
+                    .uri("/simular-cenario-financeiro")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payloadBytes)
+                    .retrieve()
+                    .body(String.class);
+
+            return parseSimulador(objectMapper.readTree(json));
+
+        } catch (Exception e) {
+            log.warn("Erro ao chamar simulador financeiro via Python: {}", e.getMessage());
+            return SIMULADOR_FALLBACK;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private SimuladorResponse parseSimulador(JsonNode node) {
+        if (node == null) return SIMULADOR_FALLBACK;
+
+        List<SimuladorProjecaoItem> projecao = new ArrayList<>();
+        JsonNode projArr = node.path("projecaoMensal");
+        if (projArr.isArray()) {
+            for (JsonNode p : projArr) {
+                projecao.add(new SimuladorProjecaoItem(
+                        p.path("mes").asText(""),
+                        p.hasNonNull("receitasProjetadas") ? p.get("receitasProjetadas").asDouble() : null,
+                        p.hasNonNull("despesasProjetadas") ? p.get("despesasProjetadas").asDouble() : null,
+                        p.path("saldoProjetado").asDouble(0),
+                        p.hasNonNull("valorAcumuladoMeta") ? p.get("valorAcumuladoMeta").asDouble() : null
+                ));
+            }
+        }
+
+        List<SimuladorCenario> cenarios = new ArrayList<>();
+        JsonNode cenariosArr = node.path("cenariosComparativos");
+        if (cenariosArr.isArray()) {
+            for (JsonNode c : cenariosArr) {
+                cenarios.add(new SimuladorCenario(
+                        c.path("nome").asText(""),
+                        c.path("descricao").asText(""),
+                        c.hasNonNull("valorMensal") ? c.get("valorMensal").asDouble() : null,
+                        c.hasNonNull("mesesParaAtingir") ? c.get("mesesParaAtingir").asInt() : null,
+                        c.hasNonNull("saldoFinalProjetado") ? c.get("saldoFinalProjetado").asDouble() : null,
+                        c.hasNonNull("economiaMensal") ? c.get("economiaMensal").asDouble() : null,
+                        c.hasNonNull("percentualReducao") ? c.get("percentualReducao").asDouble() : null
+                ));
+            }
+        }
+
+        List<String> alertas = new ArrayList<>();
+        JsonNode alertasArr = node.path("alertas");
+        if (alertasArr.isArray()) alertasArr.forEach(a -> alertas.add(a.asText()));
+
+        List<String> recs = new ArrayList<>();
+        JsonNode recsArr = node.path("recomendacoes");
+        if (recsArr.isArray()) recsArr.forEach(r -> recs.add(r.asText()));
+
+        Map<String, Object> resultado = Map.of();
+        JsonNode resNode = node.path("resultado");
+        if (!resNode.isMissingNode() && !resNode.isNull()) {
+            try {
+                resultado = objectMapper.convertValue(resNode, Map.class);
+            } catch (Exception ignored) {}
+        }
+
+        return new SimuladorResponse(
+                node.path("tipoSimulacao").asText("INFORMATIVO"),
+                node.path("titulo").asText(""),
+                node.path("mensagemPrincipal").asText(""),
+                resultado,
+                projecao,
+                cenarios,
+                alertas,
+                recs
         );
     }
 

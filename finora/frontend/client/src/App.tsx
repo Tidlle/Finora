@@ -18,6 +18,7 @@ import FutureEvolutionPage from "./pages/FutureEvolutionPage";
 import ImportTransactionsPage from "./pages/ImportTransactionsPage";
 import MonthlyReportPage from "./pages/MonthlyReportPage";
 import AssistantPage from "./pages/AssistantPage";
+import SimulatorPage from "./pages/SimulatorPage";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useFinora();
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/import">{() => <ProtectedRoute><ImportTransactionsPage /></ProtectedRoute>}</Route>
       <Route path="/report">{() => <ProtectedRoute><MonthlyReportPage /></ProtectedRoute>}</Route>
       <Route path="/assistant">{() => <ProtectedRoute><AssistantPage /></ProtectedRoute>}</Route>
+      <Route path="/simulator">{() => <ProtectedRoute><SimulatorPage /></ProtectedRoute>}</Route>
       <Route component={NotFound} />
     </Switch>
   );
