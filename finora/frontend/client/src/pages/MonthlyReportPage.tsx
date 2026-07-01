@@ -133,7 +133,21 @@ export default function MonthlyReportPage() {
   }, [mes]);
 
   const ind = relatorio?.indicadores;
-  const saldoPositivo = (ind?.saldo ?? 0) >= 0;
+  const saldo = ind?.saldo ?? 0;
+  const saldoPositivo = saldo > 0;
+  const saldoNegativo = saldo < 0;
+
+  const cardBg = saldoPositivo
+    ? "bg-green-500/10 border-green-500/30"
+    : saldoNegativo
+    ? "bg-red-500/10 border-red-500/30"
+    : "bg-yellow-500/10 border-yellow-500/30";
+
+  const cardTextCor = saldoPositivo
+    ? "text-green-400"
+    : saldoNegativo
+    ? "text-red-400"
+    : "text-yellow-400";
 
   return (
     <AppShell
@@ -193,9 +207,9 @@ export default function MonthlyReportPage() {
       {relatorio && !carregando && (
         <div className="space-y-5">
           {/* Header do relatório */}
-          <Card className={`border ${classificacaoBg(relatorio.classificacaoGeral)}`}>
+          <Card className={`border ${cardBg}`}>
             <CardContent className="p-6">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="flex items-start gap-4 flex-wrap">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <Sparkles size={16} className="text-primary" />
@@ -206,12 +220,9 @@ export default function MonthlyReportPage() {
                   <h2 className="text-xl font-bold text-foreground">{relatorio.titulo}</h2>
                   <p className="text-sm text-muted-foreground">{relatorio.subtitulo}</p>
                 </div>
-                <span className={`text-sm font-semibold px-3 py-1 rounded-full border ${classificacaoBg(relatorio.classificacaoGeral)} ${classificacaoCor(relatorio.classificacaoGeral)}`}>
-                  {relatorio.classificacaoGeral}
-                </span>
               </div>
 
-              <p className={`mt-4 text-base font-medium ${classificacaoCor(relatorio.classificacaoGeral)}`}>
+              <p className={`mt-4 text-base font-medium ${cardTextCor}`}>
                 {relatorio.mensagemPrincipal}
               </p>
             </CardContent>
